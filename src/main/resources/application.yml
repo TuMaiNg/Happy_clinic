@@ -1,0 +1,18 @@
+spring:
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/clinic_booking?useSSL=false&serverTimezone=Asia/Ho_Chi_Minh&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  sql:
+    init:
+      mode: always               
+server:
+  port: 8080
+
+jwt:
+  secret: mySuperSecretJwtKeyForClinicBooking2025ABCDEF1234567890XYZHIJKLMNOPQRS
+  expiration: 86400000
