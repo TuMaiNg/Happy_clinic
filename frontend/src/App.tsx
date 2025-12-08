@@ -8,12 +8,35 @@ import { Dashboard } from './pages/Dashboard';
 import { PatientDashboard } from './pages/PatientDashboard';
 import { BookingWizard } from './components/features/appointments/BookingWizard';
 import { Appointments } from './pages/Appointments';
+import { AdminLayout } from './pages/admin/Layout/AdminLayout';
+import { AdminDashboard } from './pages/admin/Dashboard/AdminDashboard';
+import { AppointmentList } from './pages/admin/Appointments/AppointmentList';
+import { PatientList } from './pages/admin/Patients/PatientList';
+import { DoctorList } from './pages/admin/Doctors/DoctorList';
+import { ServiceList } from './pages/admin/Services/ServiceList';
+import { PaymentList } from './pages/admin/Payments/PaymentList';
+import { ReportsPage } from './pages/admin/Reports/ReportsPage';
+import { SettingsPage } from './pages/admin/Settings/SettingsPage';
+import { DoctorDashboard } from './pages/doctor/DoctorDashboard';
+import { StaffDashboard } from './pages/staff/StaffDashboard';
 
 const RoleBasedDashboard = () => {
   const { user } = useAuth();
   
   if (user?.role === 'patient') {
     return <PatientDashboard />;
+  }
+  
+  if (user?.role === 'doctor') {
+    return <DoctorDashboard />;
+  }
+  
+  if (user?.role === 'staff') {
+    return <StaffDashboard />;
+  }
+  
+  if (user?.role === 'admin') {
+    return <Navigate to="/admin" replace />;
   }
   
   return <Dashboard />;
@@ -47,6 +70,42 @@ function App() {
             element={
               <ProtectedRoute>
                 <Appointments />
+              </ProtectedRoute>
+            }
+          />
+          {/* Admin Routes */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<AdminDashboard />} />
+            <Route path="appointments" element={<AppointmentList />} />
+            <Route path="patients" element={<PatientList />} />
+            <Route path="doctors" element={<DoctorList />} />
+            <Route path="services" element={<ServiceList />} />
+            <Route path="payments" element={<PaymentList />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+          {/* Doctor Routes */}
+          <Route
+            path="/doctor"
+            element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <DoctorDashboard />
+              </ProtectedRoute>
+            }
+          />
+          {/* Staff Routes */}
+          <Route
+            path="/staff"
+            element={
+              <ProtectedRoute allowedRoles={['staff']}>
+                <StaffDashboard />
               </ProtectedRoute>
             }
           />

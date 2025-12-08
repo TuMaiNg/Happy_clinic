@@ -200,8 +200,18 @@ export class AppointmentModel {
     return this.findById(id);
   }
 
-  private static mapRowToAppointment(row: any): Appointment {
-    return {
+  private static mapRowToAppointment(row: any): Appointment & {
+    patient_name?: string;
+    patient_phone?: string;
+    doctor_name?: string;
+    service_name?: string;
+  } {
+    const appointment: Appointment & {
+      patient_name?: string;
+      patient_phone?: string;
+      doctor_name?: string;
+      service_name?: string;
+    } = {
       id: row.id,
       patientId: row.patient_id,
       doctorId: row.doctor_id,
@@ -226,6 +236,14 @@ export class AppointmentModel {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+
+    // Include joined fields if present
+    if (row.patient_name) appointment.patient_name = row.patient_name;
+    if (row.patient_phone) appointment.patient_phone = row.patient_phone;
+    if (row.doctor_name) appointment.doctor_name = row.doctor_name;
+    if (row.service_name) appointment.service_name = row.service_name;
+
+    return appointment;
   }
 }
 

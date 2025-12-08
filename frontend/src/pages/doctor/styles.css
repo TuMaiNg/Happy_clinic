@@ -1,0 +1,148 @@
+/* Doctor Dashboard Styles */
+.doctor-dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.dashboard-header {
+  margin-bottom: 2rem;
+}
+
+.dashboard-header h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #212529;
+  margin: 0 0 0.5rem 0;
+}
+
+.dashboard-header .text-muted {
+  color: #6C757D;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.loading-container,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: #6C757D;
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  color: #E9ECEF;
+  margin-bottom: 1rem;
+}
+
+.appointments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.appointment-card {
+  background-color: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #E9ECEF;
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.appointment-time {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 80px;
+  padding: 1rem;
+  background-color: #F8F9FA;
+  border-radius: 8px;
+}
+
+.time-icon {
+  width: 24px;
+  height: 24px;
+  color: #0066CC;
+}
+
+.appointment-time span {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.appointment-content {
+  flex: 1;
+}
+
+.appointment-content h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #212529;
+  margin: 0 0 0.5rem 0;
+}
+
+.appointment-service {
+  color: #6C757D;
+  font-size: 0.875rem;
+  margin: 0.25rem 0;
+}
+
+.appointment-phone {
+  color: #6C757D;
+  font-size: 0.875rem;
+  margin: 0.25rem 0;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: 0.5rem;
+}
+
+.status-confirmed {
+  background-color: #E3F2FD;
+  color: #1976D2;
+}
+
+.status-checked-in {
+  background-color: #E8F4F8;
+  color: #0066CC;
+}
+
+.status-completed {
+  background-color: #E8F5E9;
+  color: #00C853;
+}
+
+.appointment-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 150px;
+  align-items: flex-end;
+}
+
+.status-hint {
+  font-size: 0.75rem;
+  color: #6C757D;
+  font-style: italic;
+}
+
+.status-done {
+  font-size: 0.875rem;
+  color: #00C853;
+  font-weight: 500;
+}
+

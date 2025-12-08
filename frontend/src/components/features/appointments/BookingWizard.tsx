@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doctorService } from '../../../services/doctor.service';
 import { serviceService } from '../../../services/service.service';
@@ -10,8 +10,179 @@ import { Button } from '../../common/Button';
 import { Card } from '../../common/Card';
 import { Modal } from '../../common/Modal';
 import { Calendar } from '../../common/Calendar';
-import { OTPVerification } from './OTPVerification';
+import api from '../../../config/api';
 import { CheckCircleIcon, UserIcon, CalendarIcon, ClockIcon } from '@heroicons/react/24/outline';
+
+// Inline OTP Verification Component for Modal
+interface OTPVerificationInlineProps {
+  appointmentId: number;
+  phone: string;
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+const OTPVerificationInline: React.FC<OTPVerificationInlineProps> = ({
+  appointmentId,
+  phone,
+  onSuccess,
+  onCancel,
+}) => {
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(300);
+  const [canResend, setCanResend] = useState(false);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      setCanResend(true);
+      return;
+    }
+    const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  useEffect(() => {
+    inputRefs.current[0]?.focus();
+  }, []);
+
+  const handleChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+    setError('');
+    if (value && index < 5) inputRefs.current[index + 1]?.focus();
+    if (newOtp.every((d) => d !== '') && index === 5) handleVerify(newOtp.join(''));
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    if (/^\d{6}$/.test(pastedData)) {
+      setOtp(pastedData.split(''));
+      inputRefs.current[5]?.focus();
+      handleVerify(pastedData);
+    }
+  };
+
+  const handleVerify = async (code: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.post(`/appointments/${appointmentId}/verify-otp`, { otp: code });
+      if (response.data.verified) {
+        onSuccess();
+      } else {
+        setError(response.data.error || 'Mã không đúng');
+        setOtp(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Có lỗi xảy ra. Vui lòng thử lại.');
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await api.post(`/appointments/${appointmentId}/resend-otp`);
+      setTimeLeft(300);
+      setCanResend(false);
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Không thể gửi lại mã');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="text-center p-4">
+      <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg className="w-8 h-8 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      </div>
+      
+      <h3 className="text-xl font-bold text-neutral-dark mb-2">Xác nhận OTP</h3>
+      <p className="text-neutral-medium mb-4">
+        Nhập mã 6 số đã gửi đến <span className="font-semibold">{phone}</span>
+      </p>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg mb-4 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="flex justify-center gap-2 mb-4">
+        {otp.map((digit, index) => (
+          <input
+            key={index}
+            ref={(el) => (inputRefs.current[index] = el)}
+            type="text"
+            inputMode="numeric"
+            maxLength={1}
+            value={digit}
+            onChange={(e) => handleChange(index, e.target.value)}
+            onKeyDown={(e) => handleKeyDown(index, e)}
+            onPaste={handlePaste}
+            disabled={loading}
+            className="w-12 h-14 text-center text-2xl font-bold border-2 rounded-lg focus:border-primary-500 focus:outline-none"
+          />
+        ))}
+      </div>
+
+      <p className="text-sm text-neutral-medium mb-4">
+        {timeLeft > 0 ? (
+          <>Mã hết hạn sau: <span className="font-semibold text-primary-500">{formatTime(timeLeft)}</span></>
+        ) : (
+          <span className="text-red-500">Mã đã hết hạn</span>
+        )}
+      </p>
+
+      <div className="flex gap-3 justify-center">
+        <Button variant="outline" onClick={onCancel} disabled={loading}>
+          Hủy
+        </Button>
+        {canResend ? (
+          <Button variant="primary" onClick={handleResend} isLoading={loading}>
+            Gửi lại mã
+          </Button>
+        ) : (
+          <Button 
+            variant="primary" 
+            onClick={() => handleVerify(otp.join(''))} 
+            isLoading={loading}
+            disabled={otp.some(d => d === '')}
+          >
+            Xác nhận
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 interface BookingWizardProps {
   onComplete?: () => void;
@@ -178,7 +349,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
     ? doctors.filter(d => d.specialty === specialtyFilter)
     : doctors;
 
-  const doctorSpecialties = Array.from(new Set(doctors.map(d => d.specialty)));
+  const doctorSpecialties = Array.from(new Set(doctors.map(d => d.specialty).filter(Boolean)));
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-warm-50 to-white py-8">
@@ -657,6 +828,27 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* OTP Verification Modal */}
+      <Modal
+        isOpen={showOTPModal}
+        onClose={() => {
+          setShowOTPModal(false);
+        }}
+        size="md"
+      >
+        {appointmentId && (
+          <OTPVerificationInline
+            appointmentId={appointmentId}
+            phone={maskedPhone}
+            onSuccess={() => {
+              setShowOTPModal(false);
+              setShowSuccessModal(true);
+            }}
+            onCancel={() => setShowOTPModal(false)}
+          />
+        )}
       </Modal>
     </div>
   );

@@ -45,32 +45,45 @@ const generateTimeSlots = async (scheduleId: number, startTime: string, endTime:
 };
 
 export const createSchedule = async (req: AuthRequest, res: Response) => {
-  if (!req.user || req.user.role !== 'doctor') {
-    throw new AppError('Chỉ bác sĩ mới có thể tạo lịch làm việc', 403);
+  if (!req.user) {
+    throw new AppError('Không có quyền truy cập', 403);
   }
 
-  const { date, startTime, endTime, maxPatientsPerSlot, isDayOff } = req.body;
+  const { date, startTime, endTime, maxPatientsPerSlot, isDayOff, doctorId: bodyDoctorId } = req.body;
 
   if (!date || !startTime || !endTime) {
     throw new AppError('Vui lòng điền đầy đủ thông tin', 400);
   }
 
-  // Get doctor ID
-  const { DoctorModel } = await import('../models/Doctor');
-  const doctor = await DoctorModel.findByUserId(req.user.id);
-  if (!doctor) {
-    throw new AppError('Không tìm thấy thông tin bác sĩ', 404);
+  let doctorId: number;
+  
+  // Admin/Staff có thể tạo lịch cho bất kỳ bác sĩ nào
+  if (['admin', 'staff'].includes(req.user.role)) {
+    if (!bodyDoctorId) {
+      throw new AppError('Vui lòng chọn bác sĩ', 400);
+    }
+    doctorId = bodyDoctorId;
+  } else if (req.user.role === 'doctor') {
+    // Doctor chỉ tạo được lịch cho chính mình
+    const { DoctorModel } = await import('../models/Doctor');
+    const doctor = await DoctorModel.findByUserId(req.user.id);
+    if (!doctor) {
+      throw new AppError('Không tìm thấy thông tin bác sĩ', 404);
+    }
+    doctorId = doctor.id!;
+  } else {
+    throw new AppError('Không có quyền tạo lịch làm việc', 403);
   }
 
   // Check if schedule already exists for this date
-  const existing = await ScheduleModel.findByDoctorAndDate(doctor.id!, new Date(date));
+  const existing = await ScheduleModel.findByDoctorAndDate(doctorId, new Date(date));
   if (existing) {
     throw new AppError('Đã có lịch làm việc cho ngày này', 409);
   }
 
   // Create schedule
   const schedule = await ScheduleModel.create({
-    doctorId: doctor.id!,
+    doctorId,
     date: new Date(date),
     startTime,
     endTime,
@@ -119,8 +132,8 @@ export const getSchedules = async (req: AuthRequest, res: Response) => {
 };
 
 export const updateSchedule = async (req: AuthRequest, res: Response) => {
-  if (!req.user || req.user.role !== 'doctor') {
-    throw new AppError('Chỉ bác sĩ mới có thể cập nhật lịch làm việc', 403);
+  if (!req.user) {
+    throw new AppError('Không có quyền truy cập', 403);
   }
 
   const scheduleId = parseInt(req.params.id);
@@ -130,11 +143,16 @@ export const updateSchedule = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không tìm thấy lịch làm việc', 404);
   }
 
-  // Verify doctor ownership
-  const { DoctorModel } = await import('../models/Doctor');
-  const doctor = await DoctorModel.findByUserId(req.user.id);
-  if (doctor?.id !== schedule.doctorId) {
-    throw new AppError('Không có quyền cập nhật lịch làm việc này', 403);
+  // Admin/Staff có thể cập nhật bất kỳ lịch nào
+  // Doctor chỉ cập nhật được lịch của mình
+  if (req.user.role === 'doctor') {
+    const { DoctorModel } = await import('../models/Doctor');
+    const doctor = await DoctorModel.findByUserId(req.user.id);
+    if (doctor?.id !== schedule.doctorId) {
+      throw new AppError('Không có quyền cập nhật lịch làm việc này', 403);
+    }
+  } else if (!['admin', 'staff'].includes(req.user.role)) {
+    throw new AppError('Không có quyền cập nhật lịch làm việc', 403);
   }
 
   const updated = await ScheduleModel.update(scheduleId, req.body);
@@ -147,8 +165,8 @@ export const updateSchedule = async (req: AuthRequest, res: Response) => {
 };
 
 export const deleteSchedule = async (req: AuthRequest, res: Response) => {
-  if (!req.user || req.user.role !== 'doctor') {
-    throw new AppError('Chỉ bác sĩ mới có thể xóa lịch làm việc', 403);
+  if (!req.user) {
+    throw new AppError('Không có quyền truy cập', 403);
   }
 
   const scheduleId = parseInt(req.params.id);
@@ -158,11 +176,16 @@ export const deleteSchedule = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không tìm thấy lịch làm việc', 404);
   }
 
-  // Verify doctor ownership
-  const { DoctorModel } = await import('../models/Doctor');
-  const doctor = await DoctorModel.findByUserId(req.user.id);
-  if (doctor?.id !== schedule.doctorId) {
-    throw new AppError('Không có quyền xóa lịch làm việc này', 403);
+  // Admin/Staff có thể xóa bất kỳ lịch nào
+  // Doctor chỉ xóa được lịch của mình
+  if (req.user.role === 'doctor') {
+    const { DoctorModel } = await import('../models/Doctor');
+    const doctor = await DoctorModel.findByUserId(req.user.id);
+    if (doctor?.id !== schedule.doctorId) {
+      throw new AppError('Không có quyền xóa lịch làm việc này', 403);
+    }
+  } else if (!['admin', 'staff'].includes(req.user.role)) {
+    throw new AppError('Không có quyền xóa lịch làm việc', 403);
   }
 
   // Delete time slots first
