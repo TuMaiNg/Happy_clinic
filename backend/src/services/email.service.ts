@@ -1,0 +1,152 @@
+import nodemailer from 'nodemailer';
+import { config } from '../config/env';
+import { gmailOAuthService } from './gmail-oauth.service';
+
+class EmailService {
+  private transporter: nodemailer.Transporter | null = null;
+  private useOAuth2: boolean = false;
+
+  constructor() {
+    // Check if OAuth2 is enabled and configured
+    if (config.email.useOAuth2 && gmailOAuthService.isConfigured() && gmailOAuthService.hasToken()) {
+      this.useOAuth2 = true;
+      console.log('✅ Email service: Using Gmail OAuth2');
+    } else if (config.email.user && config.email.pass) {
+      // Fallback to SMTP
+      this.transporter = nodemailer.createTransport({
+        host: config.email.host,
+        port: config.email.port,
+        secure: false,
+        auth: {
+          user: config.email.user,
+          pass: config.email.pass,
+        },
+      });
+      console.log('✅ Email service: Using SMTP');
+    } else {
+      console.warn('⚠️ Email service not configured. Emails will be logged to console only.');
+    }
+  }
+
+  private async sendEmail(to: string, subject: string, html: string) {
+    // Use OAuth2 if configured
+    if (this.useOAuth2) {
+      try {
+        await gmailOAuthService.sendEmail(to, subject, html, config.email.user);
+        return;
+      } catch (error) {
+        console.error('❌ OAuth2 email failed, falling back to SMTP:', error);
+        // Fallback to SMTP if OAuth2 fails
+      }
+    }
+
+    // Use SMTP (default or fallback)
+    if (!this.transporter) {
+      console.log('📧 Email (not sent - no config):');
+      console.log(`To: ${to}`);
+      console.log(`Subject: ${subject}`);
+      console.log(`Body: ${html}`);
+      return;
+    }
+
+    try {
+      await this.transporter.sendMail({
+        from: config.email.from,
+        to,
+        subject,
+        html,
+      });
+      console.log(`✅ Email sent to ${to}`);
+    } catch (error) {
+      console.error('❌ Error sending email:', error);
+      throw error;
+    }
+  }
+
+  async sendPasswordReset(email: string, resetUrl: string) {
+    const html = `<div>Password reset link: ${resetUrl}</div>`;
+    await this.sendEmail(email, 'Đặt lại mật khẩu - Happy Care Clinic', html);
+  }
+
+  async sendAppointmentConfirmation(appointment: any) {
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #0066CC, #00A86B); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0;">✓ Đặt lịch thành công!</h1>
+        </div>
+        <div style="background: #FFFFFF; padding: 30px; border: 1px solid #E2E8F0;">
+          <p>Xin chào <strong>${appointment.patientName}</strong>,</p>
+          <p>Lịch hẹn khám của bạn đã được xác nhận thành công.</p>
+          <div style="background: #F5F7FA; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #0066CC;">Thông tin lịch hẹn</h3>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #E2E8F0;">
+              <span>Bác sĩ:</span>
+              <strong>${appointment.doctorName}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #E2E8F0;">
+              <span>Dịch vụ:</span>
+              <span>${appointment.serviceName}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: none;">
+              <span>Ngày giờ:</span>
+              <strong style="color: #00A86B;">${appointment.dateTime}</strong>
+            </div>
+          </div>
+          <p><strong>Lưu ý quan trọng:</strong></p>
+          <ul>
+            <li>Vui lòng đến sớm 10-15 phút để làm thủ tục</li>
+            <li>Mang theo giấy tờ tùy thân và thẻ bảo hiểm (nếu có)</li>
+            <li>Nếu cần hủy lịch, vui lòng thông báo trước ít nhất 24 giờ</li>
+          </ul>
+        </div>
+        <div style="text-align: center; padding: 20px; color: #8B95A5; font-size: 14px;">
+          <p><strong>Happy Care Clinic</strong></p>
+          <p>123 Nguyễn Huệ, Quận 1, TP.HCM</p>
+          <p>Hotline: 028 3334 4444</p>
+        </div>
+      </div>
+    `;
+    await this.sendEmail(appointment.patientEmail || appointment.email, 'Xác nhận lịch hẹn - Happy Care Clinic', html);
+  }
+
+  async sendAppointmentReminder(appointment: any) {
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0066CC;">⏰ Nhắc nhở lịch hẹn</h2>
+        <p>Xin chào ${appointment.patientName},</p>
+        <p>Nhắc nhở: Bạn có lịch hẹn vào ngày mai:</p>
+        <ul>
+          <li><strong>Bác sĩ:</strong> ${appointment.doctorName}</li>
+          <li><strong>Dịch vụ:</strong> ${appointment.serviceName}</li>
+          <li><strong>Ngày giờ:</strong> ${appointment.dateTime}</li>
+        </ul>
+        <p>Vui lòng đến đúng giờ hẹn.</p>
+        <p>Trân trọng,<br>Happy Care Clinic</p>
+      </div>
+    `;
+    await this.sendEmail(appointment.patientEmail || appointment.email, 'Nhắc nhở lịch hẹn - Happy Care Clinic', html);
+  }
+
+  async sendAppointmentCancelled(appointment: any) {
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #F44336;">Lịch hẹn đã bị hủy</h2>
+        <p>Xin chào ${appointment.patientName},</p>
+        <p>Lịch hẹn của bạn đã bị hủy:</p>
+        <ul>
+          <li><strong>Bác sĩ:</strong> ${appointment.doctorName}</li>
+          <li><strong>Dịch vụ:</strong> ${appointment.serviceName}</li>
+          <li><strong>Ngày giờ:</strong> ${appointment.dateTime}</li>
+          ${appointment.reason ? `<li><strong>Lý do:</strong> ${appointment.reason}</li>` : ''}
+          ${appointment.cancellationFee > 0 ? `<li><strong>Phí hủy:</strong> ${appointment.cancellationFee.toLocaleString('vi-VN')} VNĐ</li>` : ''}
+        </ul>
+        <p>Vui lòng đặt lịch hẹn mới nếu cần.</p>
+        <p>Trân trọng,<br>Happy Care Clinic</p>
+      </div>
+    `;
+    await this.sendEmail(appointment.patientEmail || appointment.email, 'Lịch hẹn đã bị hủy - Happy Care Clinic', html);
+  }
+}
+
+export const emailService = new EmailService();
+

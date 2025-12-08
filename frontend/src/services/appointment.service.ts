@@ -1,0 +1,95 @@
+import api from '../config/api';
+
+export interface CreateAppointmentRequest {
+  doctorId: number;
+  serviceId: number;
+  slotId: number;
+  appointmentDate: string;
+  visitType: 'first-visit' | 'follow-up';
+  symptoms?: string;
+}
+
+export interface Appointment {
+  id: number;
+  patientId: number;
+  doctorId: number;
+  serviceId: number;
+  slotId: number;
+  scheduleId: number;
+  appointmentDate: string;
+  startTime: string;
+  endTime: string;
+  visitType: string;
+  symptoms?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAppointmentOTPResponse {
+  appointmentId: number;
+  requiresOTP: true;
+  phone: string;
+  expiresIn: number;
+}
+
+export interface CreateAppointmentResponse {
+  success: boolean;
+  message: string;
+  data: Appointment | CreateAppointmentOTPResponse;
+}
+
+export const appointmentService = {
+  async create(data: CreateAppointmentRequest): Promise<CreateAppointmentResponse> {
+    const response = await api.post('/appointments', data);
+    return response.data;
+  },
+
+  async getAll(params?: {
+    status?: string;
+    fromDate?: string;
+    toDate?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ success: boolean; data: Appointment[] }> {
+    const response = await api.get('/appointments', { params });
+    return response.data;
+  },
+
+  async getById(id: number): Promise<{ success: boolean; data: Appointment }> {
+    const response = await api.get(`/appointments/${id}`);
+    return response.data;
+  },
+
+  // OTP verification
+  async verifyOTP(appointmentId: number, otp: string): Promise<any> {
+    const response = await api.post(`/appointments/${appointmentId}/verify-otp`, { otp });
+    return response.data;
+  },
+  
+  async resendOTP(appointmentId: number): Promise<any> {
+    const response = await api.post(`/appointments/${appointmentId}/resend-otp`);
+    return response.data;
+  },
+
+  async confirm(id: number): Promise<{ success: boolean; data: Appointment }> {
+    const response = await api.put(`/appointments/${id}/confirm`);
+    return response.data;
+  },
+
+  async cancel(id: number, reason?: string): Promise<{ success: boolean; data: Appointment }> {
+    const response = await api.put(`/appointments/${id}/cancel`, { reason });
+    return response.data;
+  },
+
+  async checkIn(id: number): Promise<{ success: boolean; data: Appointment }> {
+    const response = await api.put(`/appointments/${id}/check-in`);
+    return response.data;
+  },
+
+  async complete(id: number, notes?: string): Promise<{ success: boolean; data: Appointment }> {
+    const response = await api.put(`/appointments/${id}/complete`, { notes });
+    return response.data;
+  },
+};
+

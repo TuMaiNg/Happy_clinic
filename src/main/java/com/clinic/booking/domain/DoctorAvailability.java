@@ -29,6 +29,7 @@ public class DoctorAvailability {
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime;
 
+    @Builder.Default
     @Column(nullable = false)
     private boolean active = true;
 }

@@ -19,9 +19,9 @@
 - [x] Create AuditLogs entity
 
 ## Dependent Updates
-- [ ] Update repositories to match new entities
-- [ ] Update services and DTOs
-- [ ] Update controllers
+- [x] Update repositories to match new entities
+- [x] Update services and DTOs
+- [x] Update controllers
 - [ ] Update DataSeeder for new schema
 
 ## Authentication Fixes
@@ -30,3 +30,16 @@
 - [x] Create PasswordMigrationService to encode plain text passwords to BCrypt on startup
 - [x] Fix JWT secret key length to meet HS512 security requirements (512 bits minimum)
 - [x] Add user registration functionality with RegisterRequest DTO, AuthService register method, and AuthController register endpoint
+
+## Schema Synchronization (December 2024)
+- [x] Sync column names between Java and TypeScript:
+  - [x] Appointment: time_slot_id -> slot_id (match Java)
+  - [x] Doctor/Service: specialty -> speciality (match Java)
+  - [x] DoctorSchedule: schedule_date -> date (match Java)
+  - [x] Service: duration -> duration_minutes (match Java)
+  - [x] Appointment: Add schedule_id, start_time, end_time (match Java)
+- [x] Add isDayOff to TypeScript Schedule model
+- [x] Add asyncHandler wrapper for all routes
+- [x] Move credentials to environment variables (.env)
+- [x] Create .env.example template
+- [x] Update .gitignore for Node.js projects

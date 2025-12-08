@@ -31,3 +31,18 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Node.js ###
+node_modules/
+npm-debug.log
+yarn-error.log
+.env
+!.env.example
+
+### Backend ###
+backend/dist/
+backend/node_modules/
+
+### Frontend ###
+frontend/build/
+frontend/node_modules/
