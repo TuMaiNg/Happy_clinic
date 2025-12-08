@@ -192,7 +192,7 @@ describe('Appointment Controller', () => {
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
-          message: 'Đặt lịch hẹn thành công',
+          message: 'Đặt lịch thành công! Chúng tôi sẽ liên hệ xác nhận trong 2 giờ tới.',
         })
       );
     });

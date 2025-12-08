@@ -108,7 +108,7 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Bạn đã có lịch hẹn vào khung giờ này. Vui lòng chọn khung giờ khác hoặc hủy lịch hẹn cũ trước.', 409);
   }
 
-  // Create appointment with pending status (will be confirmed after OTP)
+  // Create appointment with PENDING status (waiting for staff confirmation)
   const appointment = await AppointmentModel.create({
     patientId,
     doctorId,
@@ -139,50 +139,51 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
   ) as any[];
   const doctor = doctorRows[0];
 
-  // Generate and send OTP
   if (!appointment.id) {
     throw new AppError('Không thể tạo lịch hẹn', 500);
   }
 
-  if (!patient.phone) {
-    throw new AppError('Bệnh nhân chưa có số điện thoại', 400);
-  }
+  // Get full appointment details for notifications
+  const fullAppointment = await AppointmentModel.findById(appointment.id);
 
+  // Notify STAFF about new pending appointment
   try {
-    const { otpService } = await import('../services/otp.service');
-    const otp = await otpService.createOTP(appointment.id, patient.phone);
-    await otpService.sendOTP(patient.phone, otp);
-
-    // Send initial notification (appointment created, pending OTP)
-    if (patient.user_id) {
-      emitNotification(patient.user_id, {
-        type: 'appointment_pending_otp',
-        title: 'Xác nhận OTP',
-        message: 'Vui lòng nhập mã OTP để hoàn tất đặt lịch',
-        appointmentId: appointment.id,
-      });
-    }
-
-    res.status(201).json({
-      success: true,
-      message: 'Đã tạo lịch hẹn. Vui lòng xác nhận OTP.',
-      data: {
-        appointmentId: appointment.id,
-        requiresOTP: true,
-        phone: otpService.maskPhone(patient.phone),
-        expiresIn: 300, // 5 minutes in seconds
-      },
+    const { notificationService } = await import('../services/notification.service');
+    await notificationService.notifyStaff({
+      type: 'new_appointment_pending',
+      title: 'Lịch hẹn mới cần xác nhận',
+      message: `Bệnh nhân ${patient.full_name} đặt lịch khám với ${doctor.full_name}`,
+      appointmentId: appointment.id,
+      priority: 'high',
     });
   } catch (error: any) {
-    console.error('Error creating OTP:', error);
-    // If OTP creation fails, still return appointment but without OTP requirement
-    // This allows the system to work even if OTP table doesn't exist yet
-    res.status(201).json({
-      success: true,
-      message: 'Đã tạo lịch hẹn thành công',
-      data: appointment,
-    });
+    console.error('Error notifying staff:', error);
+    // Don't fail the request if notification fails
   }
+
+  // Send simple booking received email to patient (not confirmation yet)
+  try {
+    if (patient.email) {
+      await emailService.sendBookingReceived({
+        to: patient.email,
+        patientName: patient.full_name,
+        appointmentId: appointment.id,
+        message: 'Lịch hẹn của bạn đang chờ xác nhận. Chúng tôi sẽ liên hệ trong vòng 2 giờ.',
+      });
+    }
+  } catch (error: any) {
+    console.error('Error sending booking received email:', error);
+    // Don't fail the request if email fails
+  }
+
+  res.status(201).json({
+    success: true,
+    message: 'Đặt lịch thành công! Chúng tôi sẽ liên hệ xác nhận trong 2 giờ tới.',
+    data: {
+      id: appointment.id,
+      ...fullAppointment,
+    },
+  });
 };
 
 // Keep old email confirmation code commented for reference
@@ -280,6 +281,41 @@ export const confirmAppointment = async (req: AuthRequest, res: Response) => {
     confirmedBy: req.user.id,
     confirmedAt: new Date(),
   });
+
+  // Get appointment details for email
+  const [appointmentDetails] = await pool.query(
+    `SELECT a.*, 
+            p.full_name as patient_name, p.phone as patient_phone,
+            d.full_name as doctor_name, d.specialty,
+            s.name as service_name, s.price as service_price,
+            u.email as patient_email
+     FROM appointments a
+     JOIN patients p ON a.patient_id = p.id
+     JOIN doctors d ON a.doctor_id = d.id
+     JOIN services s ON a.service_id = s.id
+     JOIN users u ON p.user_id = u.id
+     WHERE a.id = ?`,
+    [appointmentId]
+  ) as any[];
+  
+  const aptDetails = appointmentDetails[0];
+
+  // Send confirmation email to patient
+  try {
+    if (aptDetails.patient_email) {
+      await emailService.sendAppointmentConfirmation({
+        to: aptDetails.patient_email,
+        patientName: aptDetails.patient_name,
+        doctorName: aptDetails.doctor_name,
+        serviceName: aptDetails.service_name,
+        appointmentDate: format(new Date(aptDetails.appointment_date), 'dd/MM/yyyy'),
+        appointmentTime: `${aptDetails.start_time} - ${aptDetails.end_time}`,
+        appointmentId,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to send confirmation email:', error);
+  }
 
   // Gửi thông báo cho bệnh nhân
   try {
@@ -439,141 +475,7 @@ export const checkInAppointment = async (req: AuthRequest, res: Response) => {
   });
 };
 
-export const verifyAppointmentOTP = async (req: AuthRequest, res: Response) => {
-  const appointmentId = parseInt(req.params.id);
-  const { otp } = req.body;
-
-  if (!otp || otp.length !== 6) {
-    throw new AppError('Vui lòng nhập mã OTP hợp lệ', 400);
-  }
-
-  // Get appointment
-  const appointment = await AppointmentModel.findById(appointmentId);
-  if (!appointment) {
-    throw new AppError('Không tìm thấy lịch hẹn', 404);
-  }
-
-  // Verify OTP
-  const { otpService } = await import('../services/otp.service');
-  const result = await otpService.verifyOTP(appointmentId, otp);
-
-  if (!result.verified) {
-    return res.status(400).json({
-      success: false,
-      verified: false,
-      error: result.error,
-    });
-  }
-
-  // OTP verified - Confirm appointment
-  await AppointmentModel.update(appointmentId, {
-    status: 'confirmed',
-    confirmedAt: new Date(),
-  });
-
-  // Get full appointment details
-  const [appointments] = await pool.query(
-    `SELECT a.*, 
-            p.full_name as patient_name, p.phone as patient_phone,
-            d.full_name as doctor_name, d.specialty,
-            s.name as service_name, s.price as service_price,
-            u.email as patient_email
-     FROM appointments a
-     JOIN patients p ON a.patient_id = p.id
-     JOIN doctors d ON a.doctor_id = d.id
-     JOIN services s ON a.service_id = s.id
-     JOIN users u ON p.user_id = u.id
-     WHERE a.id = ?`,
-    [appointmentId]
-  ) as any[];
-  
-  const appointmentDetails = appointments[0];
-
-  // Send confirmation email
-  try {
-    await emailService.sendAppointmentConfirmation({
-      patientName: appointmentDetails.patient_name,
-      doctorName: appointmentDetails.doctor_name,
-      serviceName: appointmentDetails.service_name,
-      dateTime: `${format(new Date(appointmentDetails.appointmentDate), 'dd/MM/yyyy')} lúc ${appointmentDetails.startTime}`,
-      patientEmail: appointmentDetails.patient_email,
-    });
-  } catch (error) {
-    console.error('Failed to send confirmation email:', error);
-  }
-
-  // Send notification
-  const [patients] = await pool.query(
-    'SELECT user_id FROM patients WHERE id = ?',
-    [appointment.patientId]
-  ) as any[];
-  
-  if (patients.length > 0) {
-    emitNotification(patients[0].user_id, {
-      type: 'appointment_confirmed',
-      title: 'Lịch hẹn đã xác nhận',
-      message: `Lịch hẹn với bác sĩ ${appointmentDetails.doctor_name} đã được xác nhận`,
-      appointmentId,
-    });
-  }
-
-  res.json({
-    success: true,
-    verified: true,
-    message: 'Xác nhận lịch hẹn thành công',
-    data: appointmentDetails,
-  });
-};
-
-export const resendAppointmentOTP = async (req: AuthRequest, res: Response) => {
-  const appointmentId = parseInt(req.params.id);
-
-  // Get appointment and patient info
-  const [appointments] = await pool.query(
-    `SELECT a.*, p.phone, p.full_name
-     FROM appointments a
-     JOIN patients p ON a.patient_id = p.id
-     WHERE a.id = ?`,
-    [appointmentId]
-  ) as any[];
-
-  if (appointments.length === 0) {
-    throw new AppError('Không tìm thấy lịch hẹn', 404);
-  }
-
-  const appointment = appointments[0];
-
-  // Check if already confirmed
-  if (appointment.status === 'confirmed') {
-    throw new AppError('Lịch hẹn đã được xác nhận', 400);
-  }
-
-  // Check rate limit
-  const { otpService } = await import('../services/otp.service');
-  const rateCheck = await otpService.canResendOTP(appointmentId);
-
-  if (!rateCheck.canResend) {
-    throw new AppError(
-      `Vui lòng đợi ${rateCheck.waitSeconds} giây trước khi gửi lại`,
-      429
-    );
-  }
-
-  // Generate and send new OTP
-  try {
-    const otp = await otpService.createOTP(appointmentId, appointment.phone);
-    await otpService.sendOTP(appointment.phone, otp);
-  } catch (error) {
-    console.error('Failed to resend OTP:', error);
-    throw new AppError('Không thể gửi mã OTP. Vui lòng thử lại.', 500);
-  }
-
-  res.json({
-    success: true,
-    message: 'Đã gửi lại mã OTP',
-    phone: otpService.maskPhone(appointment.phone),
-  });
-};
+// OTP verification removed - appointments are now confirmed by staff
 
 export const completeAppointment = async (req: AuthRequest, res: Response) => {
   if (!req.user || req.user.role !== 'doctor') {

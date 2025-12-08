@@ -14,3 +14,4 @@ CREATE TABLE IF NOT EXISTS appointment_otp (
 );
 
 
+

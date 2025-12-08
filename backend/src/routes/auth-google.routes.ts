@@ -47,7 +47,7 @@ router.get('/google/callback', asyncHandler(async (req: Request, res: Response) 
 
   try {
     await gmailOAuthService.getToken(code as string);
-    res.send(`
+    return res.send(`
       <html>
         <head><title>Authorization Successful</title></head>
         <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
@@ -58,7 +58,7 @@ router.get('/google/callback', asyncHandler(async (req: Request, res: Response) 
       </html>
     `);
   } catch (error: any) {
-    res.status(500).send(`
+    return res.status(500).send(`
       <html>
         <head><title>Authorization Failed</title></head>
         <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
@@ -84,5 +84,6 @@ router.get('/google/status', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 export default router;
+
 
 

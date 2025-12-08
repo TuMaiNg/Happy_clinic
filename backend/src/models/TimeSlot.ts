@@ -27,7 +27,7 @@ export class TimeSlotModel {
       ]
     ) as any;
 
-    return this.findById(result.insertId);
+    return this.findById(result.insertId) as Promise<TimeSlot>;
   }
 
   static async findById(id: number): Promise<TimeSlot | null> {
@@ -45,7 +45,7 @@ export class TimeSlotModel {
       [scheduleId]
     ) as any[];
 
-    return rows.map(row => this.mapRowToTimeSlot(row));
+    return rows.map((row: any) => this.mapRowToTimeSlot(row));
   }
 
   static async findAvailableSlots(filters: {
@@ -66,7 +66,7 @@ export class TimeSlotModel {
     `;
 
     const [rows] = await pool.query(query, [filters.doctorId, filters.date]) as any[];
-    return rows.map(row => this.mapRowToTimeSlot(row));
+    return rows.map((row: any) => this.mapRowToTimeSlot(row));
   }
 
   static async incrementPatientCount(id: number): Promise<TimeSlot | null> {

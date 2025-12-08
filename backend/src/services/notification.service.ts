@@ -170,11 +170,13 @@ class NotificationService {
     // Send email
     try {
       await emailService.sendAppointmentConfirmation({
+        to: appointment.patient_email,
         patientName: appointment.patient_name,
         doctorName: appointment.doctor_name,
         serviceName: appointment.service_name,
-        dateTime: `${format(new Date(appointment.appointment_date), 'dd/MM/yyyy')} lúc ${appointment.start_time}`,
-        patientEmail: appointment.patient_email,
+        appointmentDate: format(new Date(appointment.appointment_date), 'dd/MM/yyyy'),
+        appointmentTime: `${appointment.start_time} - ${appointment.end_time}`,
+        appointmentId,
       });
     } catch (error) {
       console.error('Failed to send confirmation email:', error);
@@ -187,6 +189,49 @@ class NotificationService {
       message: `Lịch hẹn với ${appointment.doctor_name} đã được xác nhận`,
     });
   }
+
+  async notifyStaff(notification: {
+    type: string;
+    title: string;
+    message: string;
+    appointmentId: number;
+    priority?: string;
+  }) {
+    // Get all staff and admin users
+    const [staffUsers] = await pool.query(
+      `SELECT id FROM users WHERE role IN ('staff', 'admin') AND status = 'active'`
+    ) as any[];
+
+    // Send in-app notification to all staff
+    for (const user of staffUsers) {
+      emitNotification(user.id, {
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        appointmentId: notification.appointmentId,
+      });
+    }
+
+    // Create notification records in database
+    for (const user of staffUsers) {
+      await pool.query(
+        `INSERT INTO notifications 
+         (appointment_id, type, title, message, recipient, recipient_type, status, priority) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          notification.appointmentId,
+          notification.type,
+          notification.title,
+          notification.message,
+          user.id,
+          'user',
+          'sent',
+          notification.priority || 'normal',
+        ]
+      );
+    }
+  }
 }
 
+export { NotificationService };
 export const notificationService = new NotificationService();

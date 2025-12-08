@@ -27,7 +27,7 @@ export class ScheduleModel {
       ]
     ) as any;
 
-    return this.findById(result.insertId);
+    return this.findById(result.insertId) as Promise<DoctorSchedule>;
   }
 
   static async findById(id: number): Promise<DoctorSchedule | null> {
@@ -68,7 +68,7 @@ export class ScheduleModel {
     query += ' ORDER BY date ASC, start_time ASC';
 
     const [rows] = await pool.query(query, values) as any[];
-    return rows.map(row => this.mapRowToSchedule(row));
+    return rows.map((row: any) => this.mapRowToSchedule(row));
   }
 
   static async update(id: number, updates: Partial<DoctorSchedule>): Promise<DoctorSchedule | null> {

@@ -57,12 +57,28 @@ export const StaffDashboard: React.FC = () => {
   };
 
   const handleConfirm = async (id: number) => {
+    if (!window.confirm('Xác nhận lịch hẹn này?')) return;
     try {
       await api.put(`/appointments/${id}/confirm`);
       loadAppointments();
+      alert('✅ Đã xác nhận lịch hẹn thành công!');
     } catch (error: any) {
       console.error('Failed to confirm appointment:', error);
       alert(error.response?.data?.message || 'Không thể xác nhận lịch hẹn');
+    }
+  };
+
+  const handleReject = async (id: number) => {
+    const reason = window.prompt('Nhập lý do từ chối:');
+    if (reason === null) return; // User cancelled
+    
+    try {
+      await api.put(`/appointments/${id}/cancel`, { reason: reason || 'Lịch không phù hợp' });
+      loadAppointments();
+      alert('✅ Đã từ chối lịch hẹn');
+    } catch (error: any) {
+      console.error('Failed to reject appointment:', error);
+      alert(error.response?.data?.message || 'Không thể từ chối lịch hẹn');
     }
   };
 
@@ -142,13 +158,21 @@ export const StaffDashboard: React.FC = () => {
               </div>
               <div className="card-actions">
                 {appt.status === 'pending' && (
-                  <button
-                    className="btn btn-success"
-                    onClick={() => handleConfirm(appt.id)}
-                  >
-                    <CheckCircleIcon className="btn-icon" />
-                    Xác nhận
-                  </button>
+                  <>
+                    <button
+                      className="btn btn-success"
+                      onClick={() => handleConfirm(appt.id)}
+                    >
+                      <CheckCircleIcon className="btn-icon" />
+                      Xác nhận
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => handleReject(appt.id)}
+                    >
+                      Từ chối
+                    </button>
+                  </>
                 )}
                 {appt.status === 'confirmed' && (
                   <button

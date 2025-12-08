@@ -1,4 +1,4 @@
-import { NotificationService } from '../../services/notification.service';
+import { notificationService, NotificationService } from '../../services/notification.service';
 import { emailService } from '../../services/email.service';
 import { emitNotification } from '../../services/socket.service';
 import pool from '../../config/database';

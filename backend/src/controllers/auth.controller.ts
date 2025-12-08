@@ -10,15 +10,18 @@ import pool from '../config/database';
 export const register = async (req: AuthRequest, res: Response) => {
   const { email, password, fullName, phone, birthday, gender, address } = req.body;
 
+  // Validation - only patients can register publicly
   if (!email || !password || !fullName || !phone) {
     throw new AppError('Vui lòng điền đầy đủ thông tin bắt buộc', 400);
   }
 
+  // Check if email already exists
   const existingUser = await UserModel.findByEmail(email);
   if (existingUser) {
     throw new AppError('Email đã được sử dụng', 409);
   }
 
+  // Check if phone already exists
   const [existingPhone] = await pool.query(
     'SELECT id FROM patients WHERE phone = ?',
     [phone]
@@ -29,45 +32,70 @@ export const register = async (req: AuthRequest, res: Response) => {
 
   const passwordHash = await hashPassword(password);
 
-  const user = await UserModel.create({
-    email,
-    passwordHash,
-    role: 'patient',
-    status: 'active',
-  });
+  try {
+    // Start transaction
+    await pool.query('START TRANSACTION');
 
-  const patient = await PatientModel.create({
-    userId: user.id!,
-    fullName,
-    phone,
-    birthday: birthday ? new Date(birthday) : undefined,
-    gender,
-    address,
-  });
+    // Create user account (role = patient only for public registration)
+    const user = await UserModel.create({
+      email,
+      passwordHash,
+      role: 'patient', // Public registration is ONLY for patients
+      status: 'active',
+    });
 
-  const tokens = generateTokens({
-    userId: user.id!,
-    email: user.email,
-    role: user.role,
-  });
+    // Create patient record
+    const patient = await PatientModel.create({
+      userId: user.id!,
+      fullName,
+      phone,
+      email, // Store email in patient record too
+      birthday: birthday ? new Date(birthday) : undefined,
+      gender,
+      address,
+    });
 
-  res.status(201).json({
-    success: true,
-    message: 'Đăng ký thành công',
-    data: {
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
+    // Commit transaction
+    await pool.query('COMMIT');
+
+    const tokens = generateTokens({
+      userId: user.id!,
+      email: user.email,
+      role: user.role,
+    });
+
+    // Send welcome email
+    try {
+      const { emailService } = await import('../services/email.service');
+      await emailService.sendWelcome(email, fullName);
+    } catch (error) {
+      console.error('Failed to send welcome email:', error);
+      // Don't fail registration if email fails
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Đăng ký thành công',
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName,
+          role: user.role,
+        },
+        patient: {
+          id: patient.id,
+          fullName: patient.fullName,
+          phone: patient.phone,
+        },
+        tokens,
       },
-      patient: {
-        id: patient.id,
-        fullName: patient.fullName,
-        phone: patient.phone,
-      },
-      tokens,
-    },
-  });
+    });
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error('Registration error:', error);
+    throw new AppError('Đăng ký thất bại', 500);
+  }
 };
 
 export const login = async (req: AuthRequest, res: Response) => {

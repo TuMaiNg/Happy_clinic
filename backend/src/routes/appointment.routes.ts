@@ -9,10 +9,6 @@ router.post('/', authenticate, asyncHandler(appointmentController.createAppointm
 router.get('/', authenticate, asyncHandler(appointmentController.getAppointments));
 router.get('/:id', authenticate, asyncHandler(appointmentController.getAppointmentById));
 
-// OTP verification - requires authentication to prevent brute force attacks
-router.post('/:id/verify-otp', authenticate, asyncHandler(appointmentController.verifyAppointmentOTP));
-router.post('/:id/resend-otp', authenticate, asyncHandler(appointmentController.resendAppointmentOTP));
-
 // Appointment actions
 router.put('/:id/confirm', authenticate, authorize('staff', 'admin'), asyncHandler(appointmentController.confirmAppointment));
 router.put('/:id/cancel', authenticate, asyncHandler(appointmentController.cancelAppointment));

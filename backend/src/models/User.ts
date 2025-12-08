@@ -18,7 +18,7 @@ export class UserModel {
       [user.email, user.passwordHash, user.role, user.status || 'active']
     ) as any;
 
-    return this.findById(result.insertId);
+    return this.findById(result.insertId) as Promise<User>;
   }
 
   static async findById(id: number): Promise<User | null> {

@@ -70,3 +70,4 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   );
 };
 
+

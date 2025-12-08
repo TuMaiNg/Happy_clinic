@@ -51,15 +51,6 @@ export const Appointments: React.FC = () => {
     }
   };
 
-  const handleCheckIn = async (id: number) => {
-    try {
-      await appointmentService.checkIn(id);
-      loadAppointments();
-    } catch (err: any) {
-      alert('Check-in thất bại: ' + (err.response?.data?.message || err.message));
-    }
-  };
-
   const getStatusText = (status: string) => {
     const statusMap: { [key: string]: string } = {
       pending: 'Chờ xác nhận',
@@ -121,7 +112,6 @@ export const Appointments: React.FC = () => {
                   key={apt.id}
                   appointment={apt}
                   onCancel={() => handleCancelClick(apt)}
-                  onCheckIn={() => handleCheckIn(apt.id)}
                 />
               ))}
             </div>

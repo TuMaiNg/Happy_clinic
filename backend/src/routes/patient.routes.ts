@@ -19,7 +19,7 @@ router.get('/:id', authenticate, asyncHandler(async (req, res) => {
   if (!patient) {
     return res.status(404).json({ success: false, message: 'Không tìm thấy bệnh nhân' });
   }
-  res.json({ success: true, data: patient });
+  return res.json({ success: true, data: patient });
 }));
 
 export default router;

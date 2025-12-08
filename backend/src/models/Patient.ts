@@ -33,7 +33,7 @@ export class PatientModel {
       ]
     ) as any;
 
-    return this.findById(result.insertId);
+    return this.findById(result.insertId) as Promise<Patient>;
   }
 
   static async findById(id: number): Promise<Patient | null> {
@@ -85,7 +85,7 @@ export class PatientModel {
     }
 
     const [rows] = await pool.query(query, values) as any[];
-    return rows.map(row => this.mapRowToPatient(row));
+    return rows.map((row: any) => this.mapRowToPatient(row));
   }
 
   static async update(id: number, updates: Partial<Patient>): Promise<Patient | null> {

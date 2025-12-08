@@ -27,7 +27,7 @@ export class ServiceModel {
       ]
     ) as any;
 
-    return this.findById(result.insertId);
+    return this.findById(result.insertId) as Promise<Service>;
   }
 
   static async findById(id: number): Promise<Service | null> {
@@ -66,7 +66,7 @@ export class ServiceModel {
     query += ' ORDER BY name ASC';
 
     const [rows] = await pool.query(query, values) as any[];
-    return rows.map(row => this.mapRowToService(row));
+    return rows.map((row: any) => this.mapRowToService(row));
   }
 
   static async update(id: number, updates: Partial<Service>): Promise<Service | null> {

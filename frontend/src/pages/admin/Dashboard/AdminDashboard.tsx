@@ -29,15 +29,16 @@ export const AdminDashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with actual admin dashboard endpoint
-      // For now, we'll calculate from existing endpoints
-      const [appointmentsRes, patientsRes] = await Promise.all([
+      // Get dashboard data from multiple endpoints
+      const [appointmentsRes, patientsRes, paymentsRes] = await Promise.all([
         api.get('/appointments'),
         api.get('/patients'),
+        api.get('/payments').catch(() => ({ data: { data: [] } })),
       ]);
 
       const appointments = appointmentsRes.data.data || [];
       const patients = patientsRes.data.data || [];
+      const payments = paymentsRes.data.data || [];
 
       const today = new Date().toISOString().split('T')[0];
       const todayAppointments = appointments.filter((apt: any) => {
@@ -50,10 +51,20 @@ export const AdminDashboard: React.FC = () => {
         (apt: any) => apt.status === 'pending'
       );
 
+      // Calculate today's revenue from payments
+      const todayRevenue = payments
+        .filter((payment: any) => {
+          const paymentDate = payment.payment_date 
+            ? new Date(payment.payment_date).toISOString().split('T')[0]
+            : null;
+          return paymentDate === today && payment.status === 'completed';
+        })
+        .reduce((sum: number, payment: any) => sum + (Number(payment.amount) || 0), 0);
+
       setStats({
         todayAppointments: todayAppointments.length,
         pendingAppointments: pendingAppointments.length,
-        todayRevenue: 0, // TODO: Calculate from payments
+        todayRevenue: todayRevenue,
         totalPatients: patients.length,
       });
     } catch (error) {

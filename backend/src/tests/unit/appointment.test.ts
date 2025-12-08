@@ -306,11 +306,13 @@ describe('Appointment Controller', () => {
     it('should reject cancellation for non-cancellable status', async () => {
       const mockAppointment = {
         id: 1,
+        patientId: 1,
         status: 'completed', // Cannot cancel completed appointment
       };
 
       mockRequest.params = { id: '1' };
       (AppointmentModel.findById as jest.Mock).mockResolvedValue(mockAppointment);
+      (PatientModel.findByUserId as jest.Mock).mockResolvedValue({ id: 1 }); // Mock patient matching
 
       await expect(cancelAppointment(mockRequest, mockResponse)).rejects.toThrow(
         expect.objectContaining({
@@ -366,5 +368,6 @@ describe('Appointment Controller', () => {
     });
   });
 });
+
 
 

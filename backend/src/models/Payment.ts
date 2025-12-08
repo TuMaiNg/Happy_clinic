@@ -31,7 +31,7 @@ export class PaymentModel {
       ]
     ) as any;
 
-    return this.findById(result.insertId);
+    return this.findById(result.insertId) as Promise<Payment>;
   }
 
   static async findById(id: number): Promise<Payment | null> {
@@ -52,7 +52,7 @@ export class PaymentModel {
       [appointmentId]
     ) as any[];
 
-    return rows.map(row => this.mapRowToPayment(row));
+    return rows.map((row: any) => this.mapRowToPayment(row));
   }
 
   static async findAll(filters?: {
@@ -103,7 +103,7 @@ export class PaymentModel {
     }
 
     const [rows] = await pool.query(query, values) as any[];
-    return rows.map(row => this.mapRowToPayment(row));
+    return rows.map((row: any) => this.mapRowToPayment(row));
   }
 
   static async update(id: number, updates: Partial<Payment>): Promise<Payment | null> {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { format } from 'date-fns';
+import { format, isPast, parseISO } from 'date-fns';
 import { Button } from '../../common/Button';
 import { Card } from '../../common/Card';
 import { 
@@ -58,6 +58,14 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
 }) => {
   const status = statusConfig[appointment.status] || statusConfig.pending;
   const StatusIcon = status.icon;
+  
+  // Kiểm tra xem lịch hẹn đã qua chưa
+  const appointmentDate = new Date(appointment.appointmentDate);
+  const isAppointmentPast = isPast(appointmentDate);
+  
+  // Chỉ hiện nút hủy nếu lịch chưa qua và status cho phép
+  const canCancel = !isAppointmentPast && 
+    (appointment.status === 'pending' || appointment.status === 'confirmed');
 
   return (
     <Card className="hover:shadow-medium transition-all">
@@ -103,7 +111,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
 
         {/* Actions */}
         <div className="flex flex-col gap-2 ml-4">
-          {appointment.status === 'confirmed' && onCheckIn && (
+          {appointment.status === 'confirmed' && onCheckIn && !isAppointmentPast && (
             <Button
               variant="secondary"
               size="sm"
@@ -112,7 +120,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
               Check-in
             </Button>
           )}
-          {(appointment.status === 'pending' || appointment.status === 'confirmed') && (
+          {canCancel && (
             <>
               {onCancel && (
                 <Button

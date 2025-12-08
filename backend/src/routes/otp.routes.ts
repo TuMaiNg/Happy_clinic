@@ -13,3 +13,4 @@ router.get('/appointments/:id/otp-status', asyncHandler(otpController.getOTPStat
 export default router;
 
 
+

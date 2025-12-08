@@ -26,17 +26,10 @@ export interface Appointment {
   updatedAt: string;
 }
 
-export interface CreateAppointmentOTPResponse {
-  appointmentId: number;
-  requiresOTP: true;
-  phone: string;
-  expiresIn: number;
-}
-
 export interface CreateAppointmentResponse {
   success: boolean;
   message: string;
-  data: Appointment | CreateAppointmentOTPResponse;
+  data: Appointment;
 }
 
 export const appointmentService = {
@@ -61,16 +54,7 @@ export const appointmentService = {
     return response.data;
   },
 
-  // OTP verification
-  async verifyOTP(appointmentId: number, otp: string): Promise<any> {
-    const response = await api.post(`/appointments/${appointmentId}/verify-otp`, { otp });
-    return response.data;
-  },
-  
-  async resendOTP(appointmentId: number): Promise<any> {
-    const response = await api.post(`/appointments/${appointmentId}/resend-otp`);
-    return response.data;
-  },
+  // OTP verification removed - appointments are confirmed by staff
 
   async confirm(id: number): Promise<{ success: boolean; data: Appointment }> {
     const response = await api.put(`/appointments/${id}/confirm`);

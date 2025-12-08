@@ -38,7 +38,7 @@ export class NotificationModel {
       ]
     ) as any;
 
-    return this.findById(result.insertId);
+    return this.findById(result.insertId) as Promise<Notification>;
   }
 
   static async findById(id: number): Promise<Notification | null> {
@@ -76,7 +76,7 @@ export class NotificationModel {
     }
 
     const [rows] = await pool.query(query, values) as any[];
-    return rows.map(row => this.mapRowToNotification(row));
+    return rows.map((row: any) => this.mapRowToNotification(row));
   }
 
   static async findPending(retryLimit: number = 3): Promise<Notification[]> {
@@ -88,7 +88,7 @@ export class NotificationModel {
       [retryLimit]
     ) as any[];
 
-    return rows.map(row => this.mapRowToNotification(row));
+    return rows.map((row: any) => this.mapRowToNotification(row));
   }
 
   static async update(id: number, updates: Partial<Notification>): Promise<Notification | null> {

@@ -28,3 +28,4 @@ DESCRIBE appointment_otp;
 SELECT 'appointment_otp table created successfully!' as status;
 
 
+
