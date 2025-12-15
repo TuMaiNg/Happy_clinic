@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { render } from '../../../test-utils';
 import { AppointmentList } from '../Appointments/AppointmentList';
 import { api } from '../../../config/api';
 
@@ -8,7 +8,18 @@ jest.mock('../../../config/api', () => ({
   api: {
     get: jest.fn(),
     put: jest.fn(),
+    post: jest.fn(),
   },
+}));
+
+// Mock CreateAppointmentModal to avoid issues with its internal state
+jest.mock('../Appointments/CreateAppointmentModal', () => ({
+  CreateAppointmentModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="create-modal">
+      <h3>Tạo lịch hẹn</h3>
+      <button onClick={onClose}>Close</button>
+    </div>
+  ),
 }));
 
 const mockAppointments = [
@@ -41,14 +52,13 @@ describe('AppointmentList', () => {
       data: { data: mockAppointments },
     });
     (api.put as jest.Mock).mockResolvedValue({ data: { success: true } });
+    // Mock window functions
+    window.confirm = jest.fn(() => true);
+    window.alert = jest.fn();
   });
 
   it('renders appointment list with filters', async () => {
-    render(
-      <BrowserRouter>
-        <AppointmentList />
-      </BrowserRouter>
-    );
+    render(<AppointmentList />);
 
     await waitFor(() => {
       expect(screen.getByText('Quản lý lịch hẹn')).toBeInTheDocument();
@@ -57,11 +67,7 @@ describe('AppointmentList', () => {
   });
 
   it('filters appointments by status', async () => {
-    render(
-      <BrowserRouter>
-        <AppointmentList />
-      </BrowserRouter>
-    );
+    render(<AppointmentList />);
 
     await waitFor(() => {
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
@@ -80,11 +86,7 @@ describe('AppointmentList', () => {
   it('confirms pending appointment', async () => {
     window.confirm = jest.fn(() => true);
 
-    render(
-      <BrowserRouter>
-        <AppointmentList />
-      </BrowserRouter>
-    );
+    render(<AppointmentList />);
 
     await waitFor(() => {
       expect(screen.getByText('Xác nhận')).toBeInTheDocument();
@@ -101,11 +103,7 @@ describe('AppointmentList', () => {
   it('cancels appointment with confirmation', async () => {
     window.confirm = jest.fn(() => true);
 
-    render(
-      <BrowserRouter>
-        <AppointmentList />
-      </BrowserRouter>
-    );
+    render(<AppointmentList />);
 
     await waitFor(() => {
       expect(screen.getByText('Hủy')).toBeInTheDocument();
@@ -121,11 +119,7 @@ describe('AppointmentList', () => {
   });
 
   it('opens create appointment modal', async () => {
-    render(
-      <BrowserRouter>
-        <AppointmentList />
-      </BrowserRouter>
-    );
+    render(<AppointmentList />);
 
     const createButton = screen.getByText('+ Tạo lịch hẹn');
     fireEvent.click(createButton);

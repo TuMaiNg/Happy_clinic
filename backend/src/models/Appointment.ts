@@ -31,6 +31,13 @@ export interface Appointment {
 
 export class AppointmentModel {
   static async create(appointment: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'>): Promise<Appointment> {
+    // Convert visitType from 'first-visit'/'follow-up' to 'first_visit'/'follow_up' for database
+    // Database uses underscore, but TypeScript uses hyphen
+    const visitTypeStr = appointment.visitType as string;
+    const visitTypeDb = visitTypeStr === 'first-visit' ? 'first_visit' : 
+                        visitTypeStr === 'follow-up' ? 'follow_up' : 
+                        visitTypeStr.replace(/-/g, '_');
+    
     const [result] = await pool.query(
       `INSERT INTO appointments 
        (patient_id, doctor_id, service_id, slot_id, schedule_id, appointment_date, start_time, end_time, visit_type, symptoms, status) 
@@ -44,7 +51,7 @@ export class AppointmentModel {
         appointment.appointmentDate,
         appointment.startTime,
         appointment.endTime,
-        appointment.visitType,
+        visitTypeDb,
         appointment.symptoms || null,
         appointment.status || 'pending',
       ]
@@ -221,7 +228,10 @@ export class AppointmentModel {
       appointmentDate: row.appointment_date,
       startTime: row.start_time,
       endTime: row.end_time,
-      visitType: row.visit_type,
+      // Convert visitType from database format (first_visit/follow_up) to TypeScript format (first-visit/follow-up)
+      visitType: (row.visit_type === 'first_visit' ? 'first-visit' :
+                  row.visit_type === 'follow_up' ? 'follow-up' :
+                  row.visit_type?.replace(/_/g, '-') || 'first-visit') as VisitType,
       symptoms: row.symptoms,
       status: row.status,
       confirmedBy: row.confirmed_by,

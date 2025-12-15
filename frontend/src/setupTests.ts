@@ -29,3 +29,6 @@ global.IntersectionObserver = class IntersectionObserver {
   }
   unobserve() {}
 } as any;
+
+// Mock window.alert
+window.alert = jest.fn();

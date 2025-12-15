@@ -13,8 +13,9 @@ describe('PaymentList', () => {
 
   it('renders loading state initially', () => {
     (api.get as jest.Mock).mockImplementation(() => new Promise(() => {}));
-    render(<PaymentList />);
-    expect(screen.getByText(/đang tải/i)).toBeInTheDocument();
+    const { container } = render(<PaymentList />);
+    // Component hiển thị loading spinner, không có text "đang tải"
+    expect(container.querySelector('.loading-spinner')).toBeInTheDocument();
   });
 
   it('renders payments list', async () => {
@@ -154,5 +155,6 @@ describe('PaymentList', () => {
     alertSpy.mockRestore();
   });
 });
+
 
 

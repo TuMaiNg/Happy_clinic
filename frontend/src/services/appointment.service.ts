@@ -34,8 +34,40 @@ export interface CreateAppointmentResponse {
 
 export const appointmentService = {
   async create(data: CreateAppointmentRequest): Promise<CreateAppointmentResponse> {
-    const response = await api.post('/appointments', data);
-    return response.data;
+    try {
+      const response = await api.post('/appointments', data);
+      
+      // Validate response format
+      if (!response.data) {
+        throw new Error('Phản hồi từ server không hợp lệ');
+      }
+      
+      // If response has success: false, throw error
+      if (response.data.success === false) {
+        throw new Error(response.data.message || 'Đặt lịch hẹn thất bại');
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      // Handle axios error response
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        // Backend returns { success: false, message: ... }
+        if (errorData.message) {
+          throw new Error(errorData.message);
+        }
+        if (errorData.error) {
+          throw new Error(errorData.error);
+        }
+      }
+      
+      // If it's already an Error with message, re-throw it
+      if (error.message) {
+        throw error;
+      }
+      
+      throw new Error('Đặt lịch hẹn thất bại. Vui lòng thử lại.');
+    }
   },
 
   async getAll(params?: {

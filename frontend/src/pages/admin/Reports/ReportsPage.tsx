@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../../config/api';
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import './styles.css';
@@ -36,11 +36,7 @@ export const ReportsPage: React.FC = () => {
   const [revenueStats, setRevenueStats] = useState<RevenueStats | null>(null);
   const [doctorPerformance, setDoctorPerformance] = useState<DoctorPerformance[]>([]);
 
-  useEffect(() => {
-    loadReportData();
-  }, [dateRange, activeTab]);
-
-  const getDateRange = () => {
+  const getDateRange = useCallback(() => {
     const today = new Date();
     switch (dateRange) {
       case 'today':
@@ -50,9 +46,9 @@ export const ReportsPage: React.FC = () => {
       case 'month':
         return { fromDate: format(startOfMonth(today), 'yyyy-MM-dd'), toDate: format(endOfMonth(today), 'yyyy-MM-dd') };
     }
-  };
+  }, [dateRange]);
 
-  const loadReportData = async () => {
+  const loadReportData = useCallback(async () => {
     try {
       setLoading(true);
       const { fromDate, toDate } = getDateRange();
@@ -72,7 +68,11 @@ export const ReportsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab, getDateRange]);
+
+  useEffect(() => {
+    loadReportData();
+  }, [loadReportData]);
 
   const renderAppointmentReport = () => {
     if (!appointmentStats) return null;
@@ -238,5 +238,10 @@ export const ReportsPage: React.FC = () => {
     </div>
   );
 };
+
+
+
+
+
 
 

@@ -1,17 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../../../contexts/AuthContext';
-import { BellIcon, UserCircleIcon } from '@heroicons/react/24/outline';
-import { api } from '../../../config/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
+import './header.css';
 
-export const Header: React.FC = () => {
+export const DoctorHeader: React.FC = () => {
   const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    loadNotificationCount();
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -29,43 +24,27 @@ export const Header: React.FC = () => {
     };
   }, [showUserMenu]);
 
-  const loadNotificationCount = async () => {
-    try {
-      const response = await api.get('/notifications?unread=true');
-      const notifications = response?.data?.data || response?.data || [];
-      setNotificationCount(Array.isArray(notifications) ? notifications.length : 0);
-    } catch (error) {
-      console.error('Failed to load notifications:', error);
-      setNotificationCount(0);
+  const handleLogout = async () => {
+    if (window.confirm('Bạn có chắc muốn đăng xuất?')) {
+      await logout();
+      window.location.href = '/login';
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    window.location.href = '/login';
-  };
-
   return (
-    <header className="admin-header">
+    <header className="staff-header">
       <div className="header-left">
-        <h1 className="header-title">Quản trị hệ thống</h1>
+        <h1 className="header-title">Lịch hẹn bác sĩ</h1>
       </div>
 
       <div className="header-right">
-        <button className="header-icon-btn" title="Thông báo">
-          <BellIcon className="header-icon" />
-          {notificationCount > 0 && (
-            <span className="notification-badge">{notificationCount}</span>
-          )}
-        </button>
-
         <div className="user-menu-wrapper" ref={menuRef}>
           <button
             className="user-menu-btn"
             onClick={() => setShowUserMenu(!showUserMenu)}
           >
             <UserCircleIcon className="user-avatar-icon" />
-            <span className="user-name">{user?.email || 'Admin'}</span>
+            <span className="user-name">{user?.email || 'Bác sĩ'}</span>
           </button>
 
           {showUserMenu && (
@@ -76,10 +55,11 @@ export const Header: React.FC = () => {
               </div>
               <div className="user-menu-item">
                 <span className="user-menu-label">Vai trò:</span>
-                <span className="user-menu-value">{user?.role}</span>
+                <span className="user-menu-value">Bác sĩ</span>
               </div>
               <div className="user-menu-divider"></div>
               <button className="user-menu-action" onClick={handleLogout}>
+                <ArrowRightOnRectangleIcon className="btn-icon" />
                 Đăng xuất
               </button>
             </div>

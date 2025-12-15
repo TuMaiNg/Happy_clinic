@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../config/api';
 import { format } from 'date-fns';
-import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { CheckCircleIcon, XCircleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { StaffHeader } from './StaffHeader';
+import { Modal } from '../../components/common/Modal';
 import './styles.css';
 
 interface Appointment {
@@ -19,12 +21,17 @@ export const StaffDashboard: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'today' | 'pending'>('today');
+  const [confirmModal, setConfirmModal] = useState<{ show: boolean; appointment: Appointment | null }>({
+    show: false,
+    appointment: null,
+  });
+  const [rejectModal, setRejectModal] = useState<{ show: boolean; appointment: Appointment | null }>({
+    show: false,
+    appointment: null,
+  });
+  const [rejectReason, setRejectReason] = useState('');
 
-  useEffect(() => {
-    loadAppointments();
-  }, [filter]);
-
-  const loadAppointments = async () => {
+  const loadAppointments = useCallback(async () => {
     try {
       setLoading(true);
       let url = '/appointments';
@@ -35,47 +42,93 @@ export const StaffDashboard: React.FC = () => {
         url += '?status=pending';
       }
       const response = await api.get(url);
-      const rawAppointments = response.data.data || [];
+      const rawAppointments = response?.data?.data || response?.data || [];
       setAppointments(
-        rawAppointments.map((apt: any) => ({
-          id: apt.id,
-          patient_name: apt.patient_name || 'N/A',
-          patient_phone: apt.patient_phone || 'N/A',
-          doctor_name: apt.doctor_name || 'N/A',
-          service_name: apt.service_name || 'N/A',
-          appointment_date:
-            apt.appointmentDate || apt.appointment_date || '',
-          start_time: apt.startTime || apt.start_time || 'N/A',
-          status: apt.status,
-        }))
+        (Array.isArray(rawAppointments) ? rawAppointments : [])
+          .map((apt: any) => ({
+            id: apt.id,
+            patient_name: apt.patient_name || 'N/A',
+            patient_phone: apt.patient_phone || 'N/A',
+            doctor_name: apt.doctor_name || 'N/A',
+            service_name: apt.service_name || 'N/A',
+            appointment_date:
+              apt.appointmentDate || apt.appointment_date || '',
+            start_time: apt.startTime || apt.start_time || 'N/A',
+            status: apt.status,
+          }))
       );
     } catch (error) {
       console.error('Failed to load appointments:', error);
+      setAppointments([]);
     } finally {
       setLoading(false);
     }
+  }, [filter]);
+
+  useEffect(() => {
+    loadAppointments();
+  }, [loadAppointments]);
+
+  const openConfirmModal = (appointment: Appointment) => {
+    setConfirmModal({ show: true, appointment });
   };
 
-  const handleConfirm = async (id: number) => {
-    if (!window.confirm('Xác nhận lịch hẹn này?')) return;
+  const closeConfirmModal = () => {
+    setConfirmModal({ show: false, appointment: null });
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmModal.appointment) return;
+    
     try {
-      await api.put(`/appointments/${id}/confirm`);
+      await api.put(`/appointments/${confirmModal.appointment.id}/confirm`);
       loadAppointments();
-      alert('✅ Đã xác nhận lịch hẹn thành công!');
+      closeConfirmModal();
+      // Show success message
+      const successMsg = document.createElement('div');
+      successMsg.className = 'success-toast';
+      successMsg.textContent = '✅ Đã xác nhận lịch hẹn thành công!';
+      document.body.appendChild(successMsg);
+      setTimeout(() => {
+        successMsg.remove();
+      }, 3000);
     } catch (error: any) {
       console.error('Failed to confirm appointment:', error);
       alert(error.response?.data?.message || 'Không thể xác nhận lịch hẹn');
     }
   };
 
-  const handleReject = async (id: number) => {
-    const reason = window.prompt('Nhập lý do từ chối:');
-    if (reason === null) return; // User cancelled
+  const openRejectModal = (appointment: Appointment) => {
+    setRejectModal({ show: true, appointment });
+    setRejectReason('');
+  };
+
+  const closeRejectModal = () => {
+    setRejectModal({ show: false, appointment: null });
+    setRejectReason('');
+  };
+
+  const handleReject = async () => {
+    if (!rejectModal.appointment) return;
+    if (!rejectReason.trim()) {
+      alert('Vui lòng nhập lý do từ chối');
+      return;
+    }
     
     try {
-      await api.put(`/appointments/${id}/cancel`, { reason: reason || 'Lịch không phù hợp' });
+      await api.put(`/appointments/${rejectModal.appointment.id}/cancel`, { 
+        reason: rejectReason.trim() || 'Lịch không phù hợp' 
+      });
       loadAppointments();
-      alert('✅ Đã từ chối lịch hẹn');
+      closeRejectModal();
+      // Show success message
+      const successMsg = document.createElement('div');
+      successMsg.className = 'success-toast';
+      successMsg.textContent = '✅ Đã từ chối lịch hẹn';
+      document.body.appendChild(successMsg);
+      setTimeout(() => {
+        successMsg.remove();
+      }, 3000);
     } catch (error: any) {
       console.error('Failed to reject appointment:', error);
       alert(error.response?.data?.message || 'Không thể từ chối lịch hẹn');
@@ -94,23 +147,24 @@ export const StaffDashboard: React.FC = () => {
 
   return (
     <div className="staff-dashboard">
-      <div className="dashboard-header">
-        <h1>Quản lý lịch hẹn</h1>
-        <div className="filter-tabs">
-          <button
-            className={`tab ${filter === 'today' ? 'active' : ''}`}
-            onClick={() => setFilter('today')}
-          >
-            Hôm nay
-          </button>
-          <button
-            className={`tab ${filter === 'pending' ? 'active' : ''}`}
-            onClick={() => setFilter('pending')}
-          >
-            Chờ xác nhận
-          </button>
+      <StaffHeader />
+      <div className="dashboard-content">
+        <div className="dashboard-header">
+          <div className="filter-tabs">
+            <button
+              className={`tab ${filter === 'today' ? 'active' : ''}`}
+              onClick={() => setFilter('today')}
+            >
+              Hôm nay
+            </button>
+            <button
+              className={`tab ${filter === 'pending' ? 'active' : ''}`}
+              onClick={() => setFilter('pending')}
+            >
+              Chờ xác nhận
+            </button>
+          </div>
         </div>
-      </div>
 
       {loading ? (
         <div className="loading-container">
@@ -161,15 +215,16 @@ export const StaffDashboard: React.FC = () => {
                   <>
                     <button
                       className="btn btn-success"
-                      onClick={() => handleConfirm(appt.id)}
+                      onClick={() => openConfirmModal(appt)}
                     >
                       <CheckCircleIcon className="btn-icon" />
                       Xác nhận
                     </button>
                     <button
                       className="btn btn-danger"
-                      onClick={() => handleReject(appt.id)}
+                      onClick={() => openRejectModal(appt)}
                     >
+                      <XCircleIcon className="btn-icon" />
                       Từ chối
                     </button>
                   </>
@@ -187,6 +242,134 @@ export const StaffDashboard: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Confirm Modal */}
+      {confirmModal.show && confirmModal.appointment && (
+        <Modal
+          isOpen={confirmModal.show}
+          onClose={closeConfirmModal}
+          title="Xác nhận lịch hẹn"
+        >
+          <div className="confirm-modal-content">
+            <div className="confirm-info">
+              <InformationCircleIcon className="info-icon" />
+              <p className="confirm-message">
+                Bạn có chắc chắn muốn xác nhận lịch hẹn này?
+              </p>
+            </div>
+            
+            <div className="appointment-details">
+              <div className="detail-row">
+                <span className="detail-label">Bệnh nhân:</span>
+                <span className="detail-value">{confirmModal.appointment.patient_name}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Số điện thoại:</span>
+                <span className="detail-value">{confirmModal.appointment.patient_phone}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Bác sĩ:</span>
+                <span className="detail-value">{confirmModal.appointment.doctor_name}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Dịch vụ:</span>
+                <span className="detail-value">{confirmModal.appointment.service_name}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Thời gian:</span>
+                <span className="detail-value">
+                  {confirmModal.appointment.appointment_date 
+                    ? format(new Date(confirmModal.appointment.appointment_date), 'dd/MM/yyyy')
+                    : 'N/A'} lúc {confirmModal.appointment.start_time}
+                </span>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={closeConfirmModal}
+              >
+                Hủy
+              </button>
+              <button
+                className="btn btn-success"
+                onClick={handleConfirm}
+              >
+                <CheckCircleIcon className="btn-icon" />
+                Xác nhận
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModal.show && rejectModal.appointment && (
+        <Modal
+          isOpen={rejectModal.show}
+          onClose={closeRejectModal}
+          title="Từ chối lịch hẹn"
+        >
+          <div className="reject-modal-content">
+            <div className="confirm-info">
+              <XCircleIcon className="info-icon warning" />
+              <p className="confirm-message">
+                Vui lòng nhập lý do từ chối lịch hẹn này
+              </p>
+            </div>
+            
+            <div className="appointment-details">
+              <div className="detail-row">
+                <span className="detail-label">Bệnh nhân:</span>
+                <span className="detail-value">{rejectModal.appointment.patient_name}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Bác sĩ:</span>
+                <span className="detail-value">{rejectModal.appointment.doctor_name}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Thời gian:</span>
+                <span className="detail-value">
+                  {rejectModal.appointment.appointment_date 
+                    ? format(new Date(rejectModal.appointment.appointment_date), 'dd/MM/yyyy')
+                    : 'N/A'} lúc {rejectModal.appointment.start_time}
+                </span>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="label">Lý do từ chối *</label>
+              <textarea
+                className="input-field"
+                rows={4}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Nhập lý do từ chối lịch hẹn..."
+                required
+              />
+            </div>
+
+            <div className="modal-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={closeRejectModal}
+              >
+                Hủy
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleReject}
+                disabled={!rejectReason.trim()}
+              >
+                <XCircleIcon className="btn-icon" />
+                Từ chối
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      </div>
     </div>
   );
 };

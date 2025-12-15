@@ -1,17 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../../config/api';
+import { DoctorForm } from './DoctorForm';
+import { PlusIcon } from '@heroicons/react/24/outline';
 
 interface Doctor {
   id: number;
-  name: string;
-  specialization?: string;
-  phone?: string;
+  fullName: string;
+  speciality: string;
   email?: string;
+  description?: string;
+  experienceYears?: number;
+  licenseNumber?: string;
 }
 
 export const DoctorList: React.FC = () => {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     loadDoctors();
@@ -36,6 +41,13 @@ export const DoctorList: React.FC = () => {
           <h1>Quản lý bác sĩ</h1>
           <p className="text-muted">Danh sách tất cả bác sĩ</p>
         </div>
+        <button
+          className="btn btn-primary"
+          onClick={() => setShowForm(true)}
+        >
+          <PlusIcon className="btn-icon" />
+          Tạo tài khoản bác sĩ
+        </button>
       </div>
 
       <div className="table-container">
@@ -54,8 +66,8 @@ export const DoctorList: React.FC = () => {
                 <th>ID</th>
                 <th>Tên</th>
                 <th>Chuyên khoa</th>
-                <th>Số điện thoại</th>
                 <th>Email</th>
+                <th>Kinh nghiệm</th>
                 <th>Hành động</th>
               </tr>
             </thead>
@@ -63,10 +75,10 @@ export const DoctorList: React.FC = () => {
               {doctors.map((doctor) => (
                 <tr key={doctor.id}>
                   <td>#{doctor.id}</td>
-                  <td>{doctor.name}</td>
-                  <td>{doctor.specialization || '-'}</td>
-                  <td>{doctor.phone || '-'}</td>
+                  <td>{doctor.fullName}</td>
+                  <td>{doctor.speciality || '-'}</td>
                   <td>{doctor.email || '-'}</td>
+                  <td>{doctor.experienceYears ? `${doctor.experienceYears} năm` : '-'}</td>
                   <td>
                     <button className="btn-sm btn-secondary">Chi tiết</button>
                   </td>
@@ -76,8 +88,22 @@ export const DoctorList: React.FC = () => {
           </table>
         )}
       </div>
+
+      <DoctorForm
+        isOpen={showForm}
+        onClose={() => setShowForm(false)}
+        onSuccess={() => {
+          setShowForm(false);
+          loadDoctors();
+        }}
+      />
     </div>
   );
 };
+
+
+
+
+
 
 

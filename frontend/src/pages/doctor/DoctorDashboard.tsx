@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../config/api';
 import { format } from 'date-fns';
 import { CalendarIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { DoctorHeader } from './DoctorHeader';
 import './styles.css';
 
 interface Appointment {
@@ -27,9 +28,9 @@ export const DoctorDashboard: React.FC = () => {
       setLoading(true);
       const today = format(new Date(), 'yyyy-MM-dd');
       const response = await api.get(`/appointments?date=${today}`);
-      const appointments = response.data.data || [];
+      const appointments = response?.data?.data || response?.data || [];
       setTodayAppointments(
-        appointments
+        (Array.isArray(appointments) ? appointments : [])
           .filter((apt: any) => apt.status !== 'cancelled')
           .map((apt: any) => ({
             id: apt.id,
@@ -44,6 +45,7 @@ export const DoctorDashboard: React.FC = () => {
       );
     } catch (error) {
       console.error('Failed to load appointments:', error);
+      setTodayAppointments([]);
     } finally {
       setLoading(false);
     }
@@ -61,12 +63,14 @@ export const DoctorDashboard: React.FC = () => {
 
   return (
     <div className="doctor-dashboard">
-      <div className="dashboard-header">
-        <h1>Lịch hẹn hôm nay</h1>
-        <p className="text-muted">
-          {format(new Date(), 'dd/MM/yyyy')} - {todayAppointments.length} lịch hẹn
-        </p>
-      </div>
+      <DoctorHeader />
+      <div className="dashboard-content">
+        <div className="dashboard-header">
+          <h1>Lịch hẹn hôm nay</h1>
+          <p className="text-muted">
+            {format(new Date(), 'dd/MM/yyyy')} - {todayAppointments.length} lịch hẹn
+          </p>
+        </div>
 
       {loading ? (
         <div className="loading-container">
@@ -128,6 +132,7 @@ export const DoctorDashboard: React.FC = () => {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 };

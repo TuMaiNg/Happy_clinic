@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { render } from '../../../test-utils';
 import { PatientList } from '../Patients/PatientList';
 import { api } from '../../../config/api';
 
@@ -40,11 +40,7 @@ describe('PatientList', () => {
   });
 
   it('renders patient list', async () => {
-    render(
-      <BrowserRouter>
-        <PatientList />
-      </BrowserRouter>
-    );
+    render(<PatientList />);
 
     await waitFor(() => {
       expect(screen.getByText('Quản lý bệnh nhân')).toBeInTheDocument();
@@ -53,11 +49,7 @@ describe('PatientList', () => {
   });
 
   it('searches patients by name', async () => {
-    render(
-      <BrowserRouter>
-        <PatientList />
-      </BrowserRouter>
-    );
+    render(<PatientList />);
 
     await waitFor(() => {
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
@@ -67,18 +59,15 @@ describe('PatientList', () => {
     fireEvent.change(searchInput, { target: { value: 'Nguyễn' } });
 
     await waitFor(() => {
+      // URL encodes Vietnamese characters, so we check for the encoded version
       expect(api.get).toHaveBeenCalledWith(
-        expect.stringContaining('search=Nguyễn')
+        expect.stringMatching(/search=.*Nguy.*|search=Nguy%E1%BB%85n/)
       );
     });
   });
 
   it('opens add patient form', async () => {
-    render(
-      <BrowserRouter>
-        <PatientList />
-      </BrowserRouter>
-    );
+    render(<PatientList />);
 
     const addButton = screen.getByText('+ Thêm bệnh nhân');
     fireEvent.click(addButton);
@@ -89,14 +78,10 @@ describe('PatientList', () => {
   });
 
   it('opens edit patient form', async () => {
-    render(
-      <BrowserRouter>
-        <PatientList />
-      </BrowserRouter>
-    );
+    render(<PatientList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Sửa')).toBeInTheDocument();
+      expect(screen.getAllByText('Sửa').length).toBeGreaterThan(0);
     });
 
     const editButtons = screen.getAllByText('Sửa');
@@ -108,14 +93,10 @@ describe('PatientList', () => {
   });
 
   it('opens patient details', async () => {
-    render(
-      <BrowserRouter>
-        <PatientList />
-      </BrowserRouter>
-    );
+    render(<PatientList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Chi tiết')).toBeInTheDocument();
+      expect(screen.getAllByText('Chi tiết').length).toBeGreaterThan(0);
     });
 
     const detailButtons = screen.getAllByText('Chi tiết');

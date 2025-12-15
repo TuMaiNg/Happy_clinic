@@ -34,21 +34,52 @@ export interface AuthResponse {
 
 export const authService = {
   async register(data: RegisterRequest): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>('/auth/register', data);
-    if (response.data.success && response.data.data.tokens) {
-      localStorage.setItem('accessToken', response.data.data.tokens.accessToken);
-      localStorage.setItem('refreshToken', response.data.data.tokens.refreshToken);
+    try {
+      const response = await api.post<AuthResponse>('/auth/register', data);
+      if (response.data.success && response.data.data.tokens) {
+        localStorage.setItem('accessToken', response.data.data.tokens.accessToken);
+        localStorage.setItem('refreshToken', response.data.data.tokens.refreshToken);
+      }
+      return response.data;
+    } catch (error: any) {
+      // Handle axios error response
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      throw new Error(error.message || 'Đăng ký thất bại. Vui lòng thử lại.');
     }
-    return response.data;
   },
 
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>('/auth/login', data);
-    if (response.data.success && response.data.data.tokens) {
-      localStorage.setItem('accessToken', response.data.data.tokens.accessToken);
-      localStorage.setItem('refreshToken', response.data.data.tokens.refreshToken);
+    try {
+      const response = await api.post<AuthResponse>('/auth/login', data);
+      if (response.data.success && response.data.data.tokens) {
+        localStorage.setItem('accessToken', response.data.data.tokens.accessToken);
+        localStorage.setItem('refreshToken', response.data.data.tokens.refreshToken);
+      }
+      return response.data;
+    } catch (error: any) {
+      console.error('Login error:', error);
+      
+      // Handle network errors
+      if (error.isNetworkError || !error.response) {
+        const baseURL = error.details?.baseURL || 'http://localhost:3000/api';
+        throw new Error(
+          `Không thể kết nối đến server.\n` +
+          `URL: ${baseURL}/auth/login\n` +
+          `Vui lòng kiểm tra:\n` +
+          `1. Backend server có đang chạy không?\n` +
+          `2. Port có đúng không? (Backend: 3000, Frontend: 3001 hoặc khác)\n` +
+          `3. CORS có được cấu hình đúng không?`
+        );
+      }
+      
+      // Handle axios error response
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      throw new Error(error.message || 'Đăng nhập thất bại. Vui lòng thử lại.');
     }
-    return response.data;
   },
 
   async logout(): Promise<void> {

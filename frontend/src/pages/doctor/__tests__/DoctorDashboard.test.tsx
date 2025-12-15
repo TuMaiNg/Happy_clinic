@@ -11,6 +11,17 @@ jest.mock('../../../config/api', () => ({
   },
 }));
 
+jest.mock('../../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 1, email: 'doctor@example.com', role: 'doctor' },
+    isAuthenticated: true,
+    isLoading: false,
+    login: jest.fn(),
+    register: jest.fn(),
+    logout: jest.fn(),
+  }),
+}));
+
 const mockAppointments = [
   {
     id: 1,
@@ -64,14 +75,19 @@ describe('DoctorDashboard', () => {
     render(<DoctorDashboard />);
 
     await waitFor(() => {
-      expect(screen.getByText('Hoàn thành')).toBeInTheDocument();
+      expect(screen.getByText('Lê Thị B')).toBeInTheDocument();
     });
 
-    const completeButton = screen.getByText('Hoàn thành');
+    // Tìm button với text "Hoàn thành khám"
+    const completeButton = screen.getByRole('button', { 
+      name: /hoàn thành khám/i 
+    });
+    
+    expect(completeButton).toBeInTheDocument();
     fireEvent.click(completeButton);
 
     await waitFor(() => {
-      expect(api.put).toHaveBeenCalledWith('/appointments/1/complete');
+      expect(api.put).toHaveBeenCalledWith('/appointments/2/complete');
     });
   });
 

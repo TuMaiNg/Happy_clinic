@@ -1,6 +1,12 @@
 import axios from 'axios';
 
+// Force use port 3000 for backend (override .env if exists)
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+
+// Log API URL for debugging
+if (process.env.NODE_ENV === 'development') {
+  console.log('🔗 API Base URL:', API_BASE_URL);
+}
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -27,6 +33,26 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Handle network errors
+    if (!error.response) {
+      console.error('Network Error:', {
+        message: error.message,
+        code: error.code,
+        config: error.config,
+      });
+      
+      // Provide more helpful error message
+      const networkError = new Error('Không thể kết nối đến server. Vui lòng kiểm tra:');
+      (networkError as any).isNetworkError = true;
+      (networkError as any).details = {
+        url: error.config?.url,
+        baseURL: error.config?.baseURL,
+        message: error.message,
+        code: error.code,
+      };
+      return Promise.reject(networkError);
+    }
+
     const originalRequest = error.config;
 
     // If 401 and not already retried, try to refresh token

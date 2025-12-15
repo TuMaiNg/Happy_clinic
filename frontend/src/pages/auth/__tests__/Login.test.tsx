@@ -1,15 +1,9 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { BrowserRouter } from 'react-router-dom';
+import { render } from '../../../test-utils';
 import { Login } from '../Login';
 import { useAuth } from '../../../contexts/AuthContext';
-
-// Mock react-router-dom
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => jest.fn(),
-}));
 
 // Mock the auth context
 jest.mock('../../../contexts/AuthContext', () => ({
@@ -19,11 +13,7 @@ jest.mock('../../../contexts/AuthContext', () => ({
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 
 const renderLogin = () => {
-  return render(
-    <BrowserRouter>
-      <Login />
-    </BrowserRouter>
-  );
+  return render(<Login />);
 };
 
 describe('Login Page', () => {
@@ -44,14 +34,15 @@ describe('Login Page', () => {
 
   it('renders login form', () => {
     renderLogin();
-    expect(screen.getByText('Đăng nhập')).toBeInTheDocument();
+    // Use getByRole for heading to avoid multiple elements with same text
+    expect(screen.getByRole('heading', { name: /đăng nhập/i })).toBeInTheDocument();
     expect(screen.getByText('Chào mừng bạn trở lại!')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('email@example.com')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('••••••••')).toBeInTheDocument();
   });
 
   it('displays error message on login failure', async () => {
-    const mockLogin = jest.fn().mockRejectedValue(new Error('Invalid credentials'));
+    const mockLogin = jest.fn().mockRejectedValue(new Error('Đăng nhập thất bại'));
     mockUseAuth.mockReturnValue({
       login: mockLogin,
       logout: jest.fn(),

@@ -10,7 +10,7 @@ class NotificationService {
       `SELECT 
         a.*,
         p.full_name as patient_name, p.phone as patient_phone,
-        d.full_name as doctor_name, d.specialty,
+        d.full_name as doctor_name, d.speciality,
         s.name as service_name,
         u.email as patient_email, u.id as user_id
        FROM appointments a
@@ -151,7 +151,7 @@ class NotificationService {
       `SELECT 
         a.*,
         p.full_name as patient_name, p.phone as patient_phone,
-        d.full_name as doctor_name, d.specialty,
+        d.full_name as doctor_name, d.speciality,
         s.name as service_name,
         u.email as patient_email, u.id as user_id
        FROM appointments a

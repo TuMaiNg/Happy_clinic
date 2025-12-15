@@ -60,6 +60,7 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
       setAvailableSlots([]);
       setFormData((prev) => ({ ...prev, slot_id: '', start_time: '' }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.doctor_id, formData.appointment_date]);
 
   const loadInitialData = async () => {
@@ -245,7 +246,14 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
                 <p>Đang tải khung giờ...</p>
               </div>
             ) : availableSlots.length === 0 ? (
-              <p className="text-muted">Không có khung giờ trống</p>
+              <div className="no-slots-message">
+                <svg className="no-slots-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="12" cy="12" r="10" strokeWidth="2"/>
+                  <path d="M12 8v4M12 16h.01" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                <p className="no-slots-text">Không có khung giờ trống cho ngày này</p>
+                <p className="no-slots-hint">Vui lòng chọn ngày khác hoặc bác sĩ khác</p>
+              </div>
             ) : (
               <select
                 className="input-field"

@@ -1,7 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
-import { AuthProvider } from '../../contexts/AuthContext';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { render } from '../../test-utils';
 import { AppointmentList } from '../../pages/admin/Appointments/AppointmentList';
 import { StaffDashboard } from '../../pages/staff/StaffDashboard';
 import { DoctorDashboard } from '../../pages/doctor/DoctorDashboard';
@@ -11,14 +10,25 @@ jest.mock('../../config/api', () => ({
   api: {
     get: jest.fn(),
     put: jest.fn(),
+    post: jest.fn(),
   },
 }));
+
 jest.mock('../../contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: () => ({
     user: { id: 1, email: 'test@example.com', role: 'admin' },
     isAuthenticated: true,
   }),
+}));
+
+// Mock CreateAppointmentModal to avoid issues
+jest.mock('../../pages/admin/Appointments/CreateAppointmentModal', () => ({
+  CreateAppointmentModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="create-modal">
+      <button onClick={onClose}>Close</button>
+    </div>
+  ),
 }));
 
 const mockAppointment = {
@@ -39,16 +49,13 @@ describe('Appointment Flow Integration', () => {
       data: { data: [mockAppointment] },
     });
     (api.put as jest.Mock).mockResolvedValue({ data: { success: true } });
+    // Mock window.confirm and window.alert
+    window.confirm = jest.fn(() => true);
+    window.alert = jest.fn();
   });
 
   it('admin can view and confirm appointment', async () => {
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <AppointmentList />
-        </AuthProvider>
-      </BrowserRouter>
-    );
+    render(<AppointmentList />);
 
     await waitFor(() => {
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
@@ -62,42 +69,48 @@ describe('Appointment Flow Integration', () => {
     });
   });
 
-  it('staff can confirm and check-in appointment', async () => {
-    // First confirm
-    (api.get as jest.Mock).mockResolvedValueOnce({
+  it('staff can confirm pending appointment', async () => {
+    (api.get as jest.Mock).mockResolvedValue({
       data: { data: [{ ...mockAppointment, status: 'pending' }] },
     });
 
-    const { rerender } = render(
-      <BrowserRouter>
-        <AuthProvider>
-          <StaffDashboard />
-        </AuthProvider>
-      </BrowserRouter>
-    );
+    render(<StaffDashboard />);
 
     await waitFor(() => {
       expect(screen.getByText('Xác nhận')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Xác nhận'));
+    // Click button to open modal
+    const confirmButtons = screen.getAllByText('Xác nhận');
+    fireEvent.click(confirmButtons[0]);
+
+    // Wait for modal to open
+    await waitFor(() => {
+      expect(screen.getByText('Xác nhận lịch hẹn')).toBeInTheDocument();
+    });
+
+    // Find confirm button in modal
+    await waitFor(() => {
+      const modalActions = document.querySelector('.modal-actions');
+      if (modalActions) {
+        const modalConfirmButton = modalActions.querySelector('button.btn-success');
+        if (modalConfirmButton) {
+          fireEvent.click(modalConfirmButton);
+        }
+      }
+    });
 
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith('/appointments/1/confirm');
-    });
+    }, { timeout: 3000 });
+  });
 
-    // Then check-in
-    (api.get as jest.Mock).mockResolvedValueOnce({
+  it('staff can check-in confirmed appointment', async () => {
+    (api.get as jest.Mock).mockResolvedValue({
       data: { data: [{ ...mockAppointment, status: 'confirmed' }] },
     });
 
-    rerender(
-      <BrowserRouter>
-        <AuthProvider>
-          <StaffDashboard />
-        </AuthProvider>
-      </BrowserRouter>
-    );
+    render(<StaffDashboard />);
 
     await waitFor(() => {
       expect(screen.getByText('Check-in')).toBeInTheDocument();
@@ -123,19 +136,13 @@ describe('Appointment Flow Integration', () => {
       },
     });
 
-    render(
-      <BrowserRouter>
-        <AuthProvider>
-          <DoctorDashboard />
-        </AuthProvider>
-      </BrowserRouter>
-    );
+    render(<DoctorDashboard />);
 
     await waitFor(() => {
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
     });
 
-    const completeButton = screen.getByText('Hoàn thành');
+    const completeButton = screen.getByRole('button', { name: /hoàn thành khám/i });
     fireEvent.click(completeButton);
 
     await waitFor(() => {

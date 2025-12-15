@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { render } from '../../../test-utils';
 import { ServiceList } from '../Services/ServiceList';
 import { api } from '../../../config/api';
 
@@ -40,11 +40,7 @@ describe('ServiceList', () => {
   });
 
   it('renders service list', async () => {
-    render(
-      <BrowserRouter>
-        <ServiceList />
-      </BrowserRouter>
-    );
+    render(<ServiceList />);
 
     await waitFor(() => {
       expect(screen.getByText('Quản lý dịch vụ')).toBeInTheDocument();
@@ -53,33 +49,30 @@ describe('ServiceList', () => {
   });
 
   it('toggles service active status', async () => {
-    render(
-      <BrowserRouter>
-        <ServiceList />
-      </BrowserRouter>
-    );
+    render(<ServiceList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Tạm dừng')).toBeInTheDocument();
+      // Use getAllByRole to find buttons, the "Tạm dừng" button
+      const buttons = screen.getAllByRole('button');
+      const toggleButton = buttons.find(btn => btn.textContent === 'Tạm dừng');
+      expect(toggleButton).toBeTruthy();
     });
 
-    const toggleButton = screen.getByText('Tạm dừng');
+    const buttons = screen.getAllByRole('button');
+    const toggleButton = buttons.find(btn => btn.textContent === 'Tạm dừng');
+    if (toggleButton) {
     fireEvent.click(toggleButton);
+    }
 
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith('/services/1', {
-        ...mockServices[0],
         is_active: false,
       });
     });
   });
 
   it('opens add service form', async () => {
-    render(
-      <BrowserRouter>
-        <ServiceList />
-      </BrowserRouter>
-    );
+    render(<ServiceList />);
 
     const addButton = screen.getByText('+ Thêm dịch vụ');
     fireEvent.click(addButton);

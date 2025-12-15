@@ -12,14 +12,15 @@ describe('DoctorList', () => {
 
   it('renders loading state initially', () => {
     (api.get as jest.Mock).mockImplementation(() => new Promise(() => {}));
-    render(<DoctorList />);
-    expect(screen.getByText(/đang tải/i)).toBeInTheDocument();
+    const { container } = render(<DoctorList />);
+    // Component hiển thị loading spinner, không có text "đang tải"
+    expect(container.querySelector('.loading-spinner')).toBeInTheDocument();
   });
 
   it('renders doctors list', async () => {
     const mockDoctors = [
-      { id: 1, name: 'Dr. Smith', specialization: 'Cardiology', phone: '0123456789', email: 'smith@example.com' },
-      { id: 2, name: 'Dr. Jones', specialization: 'Dermatology', phone: '0987654321', email: 'jones@example.com' },
+      { id: 1, fullName: 'Dr. Smith', speciality: 'Cardiology', email: 'smith@example.com', experienceYears: 5 },
+      { id: 2, fullName: 'Dr. Jones', speciality: 'Dermatology', email: 'jones@example.com', experienceYears: 10 },
     ];
     (api.get as jest.Mock).mockResolvedValue({ data: { data: mockDoctors } });
     
@@ -56,7 +57,7 @@ describe('DoctorList', () => {
 
   it('displays doctor information correctly', async () => {
     const mockDoctors = [
-      { id: 1, name: 'Dr. Smith', specialization: 'Cardiology', phone: '0123456789', email: 'smith@example.com' },
+      { id: 1, fullName: 'Dr. Smith', speciality: 'Cardiology', email: 'smith@example.com', experienceYears: 5 },
     ];
     (api.get as jest.Mock).mockResolvedValue({ data: { data: mockDoctors } });
     
@@ -65,10 +66,10 @@ describe('DoctorList', () => {
     await waitFor(() => {
       expect(screen.getByText('Dr. Smith')).toBeInTheDocument();
       expect(screen.getByText('Cardiology')).toBeInTheDocument();
-      expect(screen.getByText('0123456789')).toBeInTheDocument();
       expect(screen.getByText('smith@example.com')).toBeInTheDocument();
     });
   });
 });
+
 
 

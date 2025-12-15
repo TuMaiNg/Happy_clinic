@@ -1,11 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AppointmentCard } from '../AppointmentCard';
-import { format } from 'date-fns';
+import { addDays, format } from 'date-fns';
+
+// Tạo ngày trong tương lai để tránh isPast() trả về true
+const futureDate = addDays(new Date(), 7);
 
 const mockAppointment = {
   id: 1,
-  appointmentDate: new Date('2025-12-10T08:00:00'),
+  appointmentDate: futureDate,
   status: 'confirmed',
   symptoms: 'Sốt cao',
   doctor_name: 'BS. Nguyễn Văn A',
@@ -18,7 +21,8 @@ describe('AppointmentCard Component', () => {
     render(<AppointmentCard appointment={mockAppointment} />);
 
     expect(screen.getByText('BS. Nguyễn Văn A')).toBeInTheDocument();
-    expect(screen.getByText('Khám tổng quát')).toBeInTheDocument();
+    // Text "Khám tổng quát" nằm trong "Dịch vụ: Khám tổng quát"
+    expect(screen.getByText(/khám tổng quát/i)).toBeInTheDocument();
     expect(screen.getByText('Sốt cao')).toBeInTheDocument();
   });
 
@@ -37,7 +41,8 @@ describe('AppointmentCard Component', () => {
     render(<AppointmentCard appointment={appointmentWithFee} />);
 
     expect(screen.getByText(/phí hủy/i)).toBeInTheDocument();
-    expect(screen.getByText(/40,000/i)).toBeInTheDocument();
+    // Format là "40.000₫" (dấu chấm, không phải dấu phẩy)
+    expect(screen.getByText(/40\.000/i)).toBeInTheDocument();
   });
 
   it('should call onCancel when cancel button is clicked', () => {
@@ -63,7 +68,8 @@ describe('AppointmentCard Component', () => {
   });
 
   it('should show check-in button only for confirmed appointments', () => {
-    render(<AppointmentCard appointment={mockAppointment} />);
+    const handleCheckIn = jest.fn();
+    render(<AppointmentCard appointment={mockAppointment} onCheckIn={handleCheckIn} />);
 
     expect(screen.getByText('Check-in')).toBeInTheDocument();
   });
@@ -88,10 +94,13 @@ describe('AppointmentCard Component', () => {
           appointment={{ ...mockAppointment, status }}
         />
       );
-      expect(container.querySelector('.bg-')).toBeInTheDocument();
+      // Tìm element có class chứa "bg-" (status badge)
+      const statusBadge = container.querySelector('[class*="bg-"]');
+      expect(statusBadge).toBeInTheDocument();
     });
   });
 });
+
 
 
 

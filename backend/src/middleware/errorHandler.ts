@@ -42,11 +42,28 @@ export const errorHandler = (
     }
   }
 
-  console.error('Error:', err);
+  console.error('Error:', {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+    ...(err as any).code && { code: (err as any).code },
+    ...(err as any).sqlMessage && { sqlMessage: (err as any).sqlMessage },
+  });
+  
+  // Return more detailed error in development
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
   return res.status(500).json({
     success: false,
-    message: 'Đã có lỗi xảy ra. Vui lòng thử lại sau.',
-    ...(process.env.NODE_ENV === 'development' && { error: err.message, stack: err.stack }),
+    message: isDevelopment 
+      ? `Lỗi server: ${err.message || 'Lỗi không xác định'}` 
+      : 'Đã có lỗi xảy ra. Vui lòng thử lại sau.',
+    ...(isDevelopment && { 
+      error: err.message, 
+      stack: err.stack,
+      ...(err as any).code && { code: (err as any).code },
+      ...(err as any).sqlMessage && { sqlMessage: (err as any).sqlMessage },
+    }),
   });
 };
 

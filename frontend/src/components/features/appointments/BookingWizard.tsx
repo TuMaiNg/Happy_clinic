@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../contexts/AuthContext';
 import { doctorService } from '../../../services/doctor.service';
 import { serviceService } from '../../../services/service.service';
 import { timeslotService } from '../../../services/timeslot.service';
@@ -25,6 +26,7 @@ const steps = [
 
 export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
@@ -58,37 +60,67 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
 
   const loadDoctors = async () => {
     try {
+      setError(''); // Clear previous errors
       const response = await doctorService.getAll({
         speciality: specialtyFilter || undefined,
       });
-      setDoctors(response.data);
+      
+      if (response.success && Array.isArray(response.data)) {
+        setDoctors(response.data);
+      } else {
+        setDoctors([]);
+        setError('Không thể tải danh sách bác sĩ');
+      }
     } catch (err: any) {
-      setError('Không thể tải danh sách bác sĩ');
+      console.error('Error loading doctors:', err);
+      setDoctors([]);
+      setError('Không thể tải danh sách bác sĩ. Vui lòng thử lại sau.');
     }
   };
 
   const loadServices = async () => {
     try {
+      setError(''); // Clear previous errors
       const response = await serviceService.getAll({ isActive: true });
-      setServices(response.data);
+      
+      if (response.success && Array.isArray(response.data)) {
+        setServices(response.data);
+      } else {
+        setServices([]);
+        setError('Không thể tải danh sách dịch vụ');
+      }
     } catch (err: any) {
-      setError('Không thể tải danh sách dịch vụ');
+      console.error('Error loading services:', err);
+      setServices([]);
+      setError('Không thể tải danh sách dịch vụ. Vui lòng thử lại sau.');
     }
   };
 
   const loadAvailableSlots = async () => {
-    if (!selectedDoctor || !selectedDate) return;
+    if (!selectedDoctor || !selectedDate) {
+      setAvailableSlots([]);
+      return;
+    }
 
     try {
+      setError(''); // Clear previous errors
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const response = await timeslotService.getAvailable({
         doctorId: selectedDoctor.id,
         date: dateStr,
         serviceId: selectedService?.id,
       });
-      setAvailableSlots(response.data);
+      
+      if (response.success && Array.isArray(response.data)) {
+        setAvailableSlots(response.data);
+      } else {
+        setAvailableSlots([]);
+      }
     } catch (err: any) {
-      setError('Không thể tải khung giờ trống');
+      console.error('Error loading available slots:', err);
+      setAvailableSlots([]);
+      // Don't set error here as it might be a temporary issue
+      // Only show error if user tries to submit
     }
   };
 
@@ -119,15 +151,76 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
     setLoading(true);
 
     try {
+      // Check authentication
+      if (!isAuthenticated || !user) {
+        setError('Bạn cần đăng nhập để đặt lịch hẹn');
+        setLoading(false);
+        setTimeout(() => navigate('/login'), 2000);
+        return;
+      }
+
+      // Validate required fields
+      if (!selectedDoctor) {
+        setError('Vui lòng chọn bác sĩ');
+        setLoading(false);
+        return;
+      }
+      if (!selectedService) {
+        setError('Vui lòng chọn dịch vụ');
+        setLoading(false);
+        return;
+      }
       if (!selectedDate) {
         setError('Vui lòng chọn ngày');
         setLoading(false);
         return;
       }
+      if (!selectedSlot) {
+        setError('Vui lòng chọn khung giờ');
+        setLoading(false);
+        return;
+      }
 
+      // Validate slot is still available
+      if (!selectedSlot.isAvailable || selectedSlot.patientCount >= selectedSlot.capacity) {
+        setError('Khung giờ này đã hết chỗ. Vui lòng chọn khung giờ khác.');
+        setLoading(false);
+        // Reload available slots
+        await loadAvailableSlots();
+        return;
+      }
+
+      // Validate date is not in the past
+      const now = new Date();
+      const selectedDateTime = new Date(selectedDate);
+      selectedDateTime.setHours(0, 0, 0, 0);
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      
+      if (selectedDateTime < today) {
+        setError('Không thể đặt lịch trong quá khứ. Vui lòng chọn ngày khác.');
+        setLoading(false);
+        return;
+      }
+
+      // Parse time slot
       const [hours, minutes] = selectedSlot.startTime.split(':');
+      if (!hours || !minutes) {
+        setError('Khung giờ không hợp lệ. Vui lòng chọn lại.');
+        setLoading(false);
+        return;
+      }
+
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const appointmentDateTime = `${dateStr}T${hours}:${minutes}:00`;
+      
+      // Validate appointment date is valid
+      const appointmentDateObj = new Date(appointmentDateTime);
+      if (isNaN(appointmentDateObj.getTime())) {
+        setError('Ngày giờ không hợp lệ. Vui lòng thử lại.');
+        setLoading(false);
+        return;
+      }
 
       const response = await appointmentService.create({
         doctorId: selectedDoctor.id,
@@ -139,22 +232,48 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
       });
 
       // Đặt lịch thành công
-      const appointmentData = response.data as { id: number };
-      setAppointmentId(appointmentData.id);
-      setShowSuccessModal(true);
-      
-      if (onComplete) {
-        onComplete();
+      if (response.success && response.data) {
+        const appointmentData = response.data as { id: number };
+        setAppointmentId(appointmentData.id);
+        setShowSuccessModal(true);
+        
+        if (onComplete) {
+          onComplete();
+        }
+      } else {
+        setError(response.message || 'Đặt lịch hẹn thất bại. Vui lòng thử lại.');
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Đặt lịch hẹn thất bại. Vui lòng thử lại.';
-      setError(errorMessage);
+      // Get error message from various sources
+      let errorMessage = 'Đã có lỗi xảy ra. Vui lòng thử lại sau.';
       
-      // If 409 conflict, suggest selecting different slot
-      if (err.response?.status === 409) {
-        // Error message already includes helpful text from backend
-        console.warn('Booking conflict:', errorMessage);
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.response?.status === 403) {
+        errorMessage = 'Bạn cần đăng nhập để đặt lịch hẹn. Vui lòng đăng nhập và thử lại.';
+      } else if (err.response?.status === 404) {
+        if (err.response?.data?.message?.includes('bệnh nhân')) {
+          errorMessage = 'Không tìm thấy thông tin bệnh nhân. Vui lòng liên hệ quản trị viên.';
+        } else {
+          errorMessage = err.response?.data?.message || 'Không tìm thấy thông tin. Vui lòng thử lại.';
+        }
+      } else if (err.response?.status === 409) {
+        errorMessage = err.response?.data?.message || 'Khung giờ này không còn trống hoặc bạn đã có lịch hẹn vào thời gian này. Vui lòng chọn khung giờ khác.';
+      } else if (err.response?.status === 400) {
+        errorMessage = err.response?.data?.message || 'Thông tin không hợp lệ. Vui lòng kiểm tra lại.';
       }
+      
+      setError(errorMessage);
+      console.error('Booking error:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        fullError: err,
+      });
     } finally {
       setLoading(false);
     }

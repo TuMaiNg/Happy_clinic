@@ -36,7 +36,8 @@ describe('Button', () => {
   it('shows loading state', () => {
     render(<Button isLoading>Button</Button>);
     expect(screen.getByText('Đang xử lý...')).toBeInTheDocument();
-    expect(screen.getByText('Button')).not.toBeInTheDocument();
+    // Khi isLoading, children không được hiển thị
+    expect(screen.queryByText('Button')).not.toBeInTheDocument();
   });
 
   it('is disabled when loading', () => {
@@ -65,5 +66,6 @@ describe('Button', () => {
     expect(handleClick).not.toHaveBeenCalled();
   });
 });
+
 
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../../config/api';
 import { PatientForm } from './PatientForm';
 import { PatientDetails } from './PatientDetails';
@@ -21,11 +21,7 @@ export const PatientList: React.FC = () => {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
 
-  useEffect(() => {
-    loadPatients();
-  }, [search]);
-
-  const loadPatients = async () => {
+  const loadPatients = useCallback(async () => {
     try {
       setLoading(true);
       const params = search ? `?search=${encodeURIComponent(search)}` : '';
@@ -36,7 +32,11 @@ export const PatientList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search]);
+
+  useEffect(() => {
+    loadPatients();
+  }, [loadPatients]);
 
   return (
     <div className="patients-page">

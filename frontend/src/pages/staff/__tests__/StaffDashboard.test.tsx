@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { StaffDashboard } from '../StaffDashboard';
 import { api } from '../../../config/api';
 import { format } from 'date-fns';
+import { AuthProvider } from '../../../contexts/AuthContext';
 
 jest.mock('../../../config/api', () => ({
   api: {
@@ -10,6 +11,22 @@ jest.mock('../../../config/api', () => ({
     put: jest.fn(),
   },
 }));
+
+jest.mock('../../../contexts/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+  useAuth: () => ({
+    user: { id: 1, email: 'staff@example.com', role: 'staff' },
+    isAuthenticated: true,
+    logout: jest.fn(),
+  }),
+}));
+
+// Mock window.confirm
+const mockConfirm = jest.fn(() => true);
+Object.defineProperty(window, 'confirm', {
+  writable: true,
+  value: mockConfirm,
+});
 
 const mockAppointments = [
   {
@@ -37,6 +54,7 @@ const mockAppointments = [
 describe('StaffDashboard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockConfirm.mockReturnValue(true);
     (api.get as jest.Mock).mockResolvedValue({
       data: { data: mockAppointments },
     });
@@ -49,7 +67,8 @@ describe('StaffDashboard', () => {
     await waitFor(() => {
       expect(screen.getByText('Quản lý lịch hẹn')).toBeInTheDocument();
       expect(screen.getByText('Hôm nay')).toBeInTheDocument();
-      expect(screen.getByText('Chờ xác nhận')).toBeInTheDocument();
+      // Use getByRole to specifically target the tab button
+      expect(screen.getByRole('button', { name: 'Chờ xác nhận' })).toBeInTheDocument();
     });
   });
 
@@ -60,7 +79,8 @@ describe('StaffDashboard', () => {
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
     });
 
-    const pendingTab = screen.getByText('Chờ xác nhận');
+    // Use getByRole to specifically target the tab button, not the status badge
+    const pendingTab = screen.getByRole('button', { name: 'Chờ xác nhận' });
     fireEvent.click(pendingTab);
 
     await waitFor(() => {
@@ -77,12 +97,30 @@ describe('StaffDashboard', () => {
       expect(screen.getByText('Xác nhận')).toBeInTheDocument();
     });
 
-    const confirmButton = screen.getByText('Xác nhận');
-    fireEvent.click(confirmButton);
+    // Get all "Xác nhận" buttons - first one is the card button, we'll click it
+    const confirmButtons = screen.getAllByText('Xác nhận');
+    const cardConfirmButton = confirmButtons[0];
+    fireEvent.click(cardConfirmButton);
+
+    // Modal should open
+    await waitFor(() => {
+      expect(screen.getByText('Xác nhận lịch hẹn')).toBeInTheDocument();
+    });
+
+    // Find confirm button in modal (should be in modal-actions)
+    await waitFor(() => {
+      const modalActions = document.querySelector('.modal-actions');
+      if (modalActions) {
+        const modalConfirmButton = modalActions.querySelector('button.btn-success');
+        if (modalConfirmButton) {
+          fireEvent.click(modalConfirmButton);
+        }
+      }
+    });
 
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith('/appointments/1/confirm');
-    });
+    }, { timeout: 3000 });
   });
 
   it('checks in confirmed appointment', async () => {
