@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../../config/api';
 import { Modal } from '../../../components/common/Modal';
 import { Input } from '../../../components/common/Input';
@@ -53,15 +53,6 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
     loadInitialData();
   }, []);
 
-  useEffect(() => {
-    if (formData.doctor_id && formData.appointment_date) {
-      loadAvailableSlots();
-    } else {
-      setAvailableSlots([]);
-      setFormData((prev) => ({ ...prev, slot_id: '', start_time: '' }));
-    }
-  }, [formData.doctor_id, formData.appointment_date]);
-
   const loadInitialData = async () => {
     try {
       const [doctorsRes, servicesRes] = await Promise.all([
@@ -77,7 +68,7 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
     }
   };
 
-  const loadAvailableSlots = async () => {
+  const loadAvailableSlots = useCallback(async () => {
     if (!formData.doctor_id || !formData.appointment_date) return;
 
     try {
@@ -92,7 +83,16 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
     } finally {
       setLoadingSlots(false);
     }
-  };
+  }, [formData.doctor_id, formData.appointment_date]);
+
+  useEffect(() => {
+    if (formData.doctor_id && formData.appointment_date) {
+      loadAvailableSlots();
+    } else {
+      setAvailableSlots([]);
+      setFormData((prev) => ({ ...prev, slot_id: '', start_time: '' }));
+    }
+  }, [formData.doctor_id, formData.appointment_date, loadAvailableSlots]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

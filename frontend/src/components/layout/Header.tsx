@@ -36,19 +36,19 @@ export const Header: React.FC = () => {
               <>
                 <Link
                   to="/dashboard"
-                  className="text-neutral-medium hover:text-primary-500 transition-colors"
+                  className="font-semibold text-neutral-medium hover:text-primary-500 transition-colors"
                 >
                   Trang chủ
                 </Link>
                 <Link
                   to="/book-appointment"
-                  className="text-neutral-medium hover:text-primary-500 transition-colors"
+                  className="font-semibold text-neutral-medium hover:text-primary-500 transition-colors"
                 >
                   Đặt lịch
                 </Link>
                 <Link
                   to="/appointments"
-                  className="text-neutral-medium hover:text-primary-500 transition-colors"
+                  className="font-semibold text-neutral-medium hover:text-primary-500 transition-colors"
                 >
                   Lịch hẹn
                 </Link>

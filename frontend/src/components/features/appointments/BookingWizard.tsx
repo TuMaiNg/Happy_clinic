@@ -110,8 +110,12 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
   };
 
   const handleBack = () => {
-    setCurrentStep(currentStep - 1);
-    setError('');
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+      setError('');
+    } else {
+      navigate(-1); // Quay về trang trước đó
+    }
   };
 
   const handleSubmit = async () => {
@@ -582,7 +586,6 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
             <Button
               variant="outline"
               onClick={handleBack}
-              disabled={currentStep === 1}
             >
               ← Quay lại
             </Button>

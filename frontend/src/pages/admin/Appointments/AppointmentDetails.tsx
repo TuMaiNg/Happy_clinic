@@ -1,6 +1,6 @@
 import React from 'react';
 import { format } from 'date-fns';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+
 import { Modal } from '../../../components/common/Modal';
 
 interface Appointment {
