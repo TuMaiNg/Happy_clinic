@@ -6,6 +6,9 @@ import { hashPassword, comparePassword } from '../utils/bcrypt';
 import { generateTokens } from '../utils/jwt';
 import { AppError } from '../middleware/errorHandler';
 import pool from '../config/database';
+import { validatePassword, validateEmail } from '../utils/passwordValidator';
+import { recordFailedLogin, clearLoginAttempts } from '../middleware/accountLockout';
+import { getClientIp } from '../middleware/security';
 
 export const register = async (req: AuthRequest, res: Response) => {
   const { email, password, fullName, phone, birthday, gender, address } = req.body;
@@ -13,6 +16,17 @@ export const register = async (req: AuthRequest, res: Response) => {
   // Validation - only patients can register publicly
   if (!email || !password || !fullName || !phone) {
     throw new AppError('Vui lòng điền đầy đủ thông tin bắt buộc', 400);
+  }
+
+  // Validate email format
+  if (!validateEmail(email)) {
+    throw new AppError('Email không hợp lệ', 400);
+  }
+
+  // Validate password strength
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.isValid) {
+    throw new AppError(`Mật khẩu không đủ mạnh: ${passwordValidation.errors.join(', ')}`, 400);
   }
 
   // Check if email already exists
@@ -44,9 +58,14 @@ export const register = async (req: AuthRequest, res: Response) => {
       status: 'active',
     });
 
+    // Safety check: ensure user was created with an ID
+    if (!user.id) {
+      throw new AppError('Lỗi khi tạo tài khoản người dùng', 500);
+    }
+
     // Create patient record
     const patient = await PatientModel.create({
-      userId: user.id!,
+      userId: user.id,
       fullName,
       phone,
       email, // Store email in patient record too
@@ -59,7 +78,7 @@ export const register = async (req: AuthRequest, res: Response) => {
     await pool.query('COMMIT');
 
     const tokens = generateTokens({
-      userId: user.id!,
+      userId: user.id,
       email: user.email,
       role: user.role,
     });
@@ -69,7 +88,6 @@ export const register = async (req: AuthRequest, res: Response) => {
       const { emailService } = await import('../services/email.service');
       await emailService.sendWelcome(email, fullName);
     } catch (error) {
-      console.error('Failed to send welcome email:', error);
       // Don't fail registration if email fails
     }
 
@@ -91,9 +109,17 @@ export const register = async (req: AuthRequest, res: Response) => {
         tokens,
       },
     });
-  } catch (error) {
-    await pool.query('ROLLBACK');
-    console.error('Registration error:', error);
+  } catch (error: any) {
+    // Attempt to rollback transaction, but don't let rollback errors mask the original error
+    try {
+      await pool.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Error during transaction rollback:', rollbackError);
+    }
+    
+    if (error instanceof AppError) {
+      throw error;
+    }
     throw new AppError('Đăng ký thất bại', 500);
   }
 };
@@ -105,32 +131,46 @@ export const login = async (req: AuthRequest, res: Response) => {
     throw new AppError('Vui lòng nhập email và mật khẩu', 400);
   }
 
+  const ip = getClientIp(req);
   const user = await UserModel.findByEmail(email);
+  
   if (!user) {
+    // Record failed attempt even if user doesn't exist (prevent user enumeration)
+    recordFailedLogin(email, ip);
     throw new AppError('Email hoặc mật khẩu không đúng', 401);
   }
 
   if (user.status !== 'active') {
+    // Don't record failed login for locked accounts to prevent information leakage
     throw new AppError('Tài khoản đã bị khóa', 403);
   }
 
   const isPasswordValid = await comparePassword(password, user.passwordHash);
   if (!isPasswordValid) {
+    recordFailedLogin(email, ip);
     throw new AppError('Email hoặc mật khẩu không đúng', 401);
   }
 
+  // Clear login attempts on successful login
+  clearLoginAttempts(email, ip);
+
+  // Safety check: user from database should always have an ID
+  if (!user.id) {
+    throw new AppError('Lỗi hệ thống: thiếu thông tin người dùng', 500);
+  }
+
   const tokens = generateTokens({
-    userId: user.id!,
+    userId: user.id,
     email: user.email,
     role: user.role,
   });
 
   let profile = null;
   if (user.role === 'patient') {
-    profile = await PatientModel.findByUserId(user.id!);
+    profile = await PatientModel.findByUserId(user.id);
   } else if (user.role === 'doctor') {
     const { DoctorModel } = await import('../models/Doctor');
-    profile = await DoctorModel.findByUserId(user.id!);
+    profile = await DoctorModel.findByUserId(user.id);
   }
 
   res.json({
@@ -164,8 +204,13 @@ export const refreshToken = async (req: AuthRequest, res: Response) => {
       throw new AppError('Người dùng không tồn tại hoặc đã bị khóa', 401);
     }
 
+    // Safety check: user from database should always have an ID
+    if (!user.id) {
+      throw new AppError('Lỗi hệ thống: thiếu thông tin người dùng', 500);
+    }
+
     const tokens = generateTokens({
-      userId: user.id!,
+      userId: user.id,
       email: user.email,
       role: user.role,
     });
@@ -204,8 +249,10 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     throw new AppError('Vui lòng nhập mật khẩu hiện tại và mật khẩu mới', 400);
   }
 
-  if (newPassword.length < 6) {
-    throw new AppError('Mật khẩu mới phải có ít nhất 6 ký tự', 400);
+  // Validate password strength
+  const passwordValidation = validatePassword(newPassword);
+  if (!passwordValidation.isValid) {
+    throw new AppError(`Mật khẩu mới không đủ mạnh: ${passwordValidation.errors.join(', ')}`, 400);
   }
 
   const user = await UserModel.findById(req.user.id);
@@ -213,13 +260,25 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     throw new AppError('Người dùng không tồn tại', 404);
   }
 
+  // Safety check: user from database should always have an ID
+  if (!user.id) {
+    throw new AppError('Lỗi hệ thống: thiếu thông tin người dùng', 500);
+  }
+
+  // Verify current password first (security: don't leak information about password match)
   const isPasswordValid = await comparePassword(currentPassword, user.passwordHash);
   if (!isPasswordValid) {
     throw new AppError('Mật khẩu hiện tại không đúng', 401);
   }
 
+  // Check if new password is same as current (after verifying current password is correct)
+  const isSamePassword = await comparePassword(newPassword, user.passwordHash);
+  if (isSamePassword) {
+    throw new AppError('Mật khẩu mới phải khác mật khẩu hiện tại', 400);
+  }
+
   const newPasswordHash = await hashPassword(newPassword);
-  await UserModel.update(user.id!, { passwordHash: newPasswordHash });
+  await UserModel.update(user.id, { passwordHash: newPasswordHash });
 
   res.json({
     success: true,

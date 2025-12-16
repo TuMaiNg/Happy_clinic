@@ -33,27 +33,75 @@ export class DoctorModel {
   }
 
   static async findById(id: number): Promise<Doctor | null> {
-    const [rows] = await pool.query(
-      `SELECT d.*, u.email, u.status 
-       FROM doctors d 
-       JOIN users u ON d.user_id = u.id 
-       WHERE d.id = ?`,
-      [id]
-    ) as any[];
+    try {
+      const [rows] = await pool.query(
+        `SELECT d.*, u.email, u.status 
+         FROM doctors d 
+         LEFT JOIN users u ON d.user_id = u.id 
+         WHERE d.id = ?`,
+        [id]
+      ) as any[];
 
-    return rows.length > 0 ? this.mapRowToDoctor(rows[0]) : null;
+      return rows.length > 0 ? this.mapRowToDoctor(rows[0]) : null;
+    } catch (error: any) {
+      console.error('Error fetching doctor by ID:', error);
+      // Fallback: query without JOIN
+      const [rows] = await pool.query(
+        `SELECT d.* FROM doctors d WHERE d.id = ?`,
+        [id]
+      ) as any[];
+      
+      if (rows.length === 0) return null;
+      
+      return {
+        id: rows[0].id,
+        userId: rows[0].user_id || 0,
+        fullName: rows[0].full_name,
+        speciality: rows[0].speciality || '',
+        description: rows[0].description,
+        experienceYears: rows[0].experience_years,
+        licenseNumber: rows[0].license_number,
+        avatar: rows[0].avatar,
+        createdAt: rows[0].created_at,
+        updatedAt: rows[0].updated_at,
+      };
+    }
   }
 
   static async findByUserId(userId: number): Promise<Doctor | null> {
-    const [rows] = await pool.query(
-      `SELECT d.*, u.email, u.status 
-       FROM doctors d 
-       JOIN users u ON d.user_id = u.id 
-       WHERE d.user_id = ?`,
-      [userId]
-    ) as any[];
+    try {
+      const [rows] = await pool.query(
+        `SELECT d.*, u.email, u.status 
+         FROM doctors d 
+         LEFT JOIN users u ON d.user_id = u.id 
+         WHERE d.user_id = ?`,
+        [userId]
+      ) as any[];
 
-    return rows.length > 0 ? this.mapRowToDoctor(rows[0]) : null;
+      return rows.length > 0 ? this.mapRowToDoctor(rows[0]) : null;
+    } catch (error: any) {
+      console.error('Error fetching doctor by user ID:', error);
+      // Fallback: query without JOIN
+      const [rows] = await pool.query(
+        `SELECT d.* FROM doctors d WHERE d.user_id = ?`,
+        [userId]
+      ) as any[];
+      
+      if (rows.length === 0) return null;
+      
+      return {
+        id: rows[0].id,
+        userId: rows[0].user_id || 0,
+        fullName: rows[0].full_name,
+        speciality: rows[0].speciality || '',
+        description: rows[0].description,
+        experienceYears: rows[0].experience_years,
+        licenseNumber: rows[0].license_number,
+        avatar: rows[0].avatar,
+        createdAt: rows[0].created_at,
+        updatedAt: rows[0].updated_at,
+      };
+    }
   }
 
   static async findAll(filters?: {
@@ -62,10 +110,12 @@ export class DoctorModel {
     limit?: number;
     offset?: number;
   }): Promise<Doctor[]> {
+    // Use LEFT JOIN to include doctors even if user doesn't exist or is inactive
+    // Filter by user status only if user exists
     let query = `SELECT d.*, u.email, u.status 
                  FROM doctors d 
-                 JOIN users u ON d.user_id = u.id 
-                 WHERE u.status = 'active'`;
+                 LEFT JOIN users u ON d.user_id = u.id 
+                 WHERE (u.status = 'active' OR u.status IS NULL)`;
     const values: any[] = [];
 
     if (filters?.speciality) {
@@ -90,8 +140,27 @@ export class DoctorModel {
       }
     }
 
-    const [rows] = await pool.query(query, values) as any[];
-    return rows.map((row: any) => this.mapRowToDoctor(row));
+    try {
+      const [rows] = await pool.query(query, values) as any[];
+      return rows.map((row: any) => this.mapRowToDoctor(row));
+    } catch (error: any) {
+      console.error('Error fetching doctors:', error);
+      // If there's a SQL error, try a simpler query without JOIN
+      const fallbackQuery = `SELECT d.* FROM doctors d ORDER BY d.full_name ASC`;
+      const [fallbackRows] = await pool.query(fallbackQuery) as any[];
+      return fallbackRows.map((row: any) => ({
+        id: row.id,
+        userId: row.user_id || 0,
+        fullName: row.full_name,
+        speciality: row.speciality || '',
+        description: row.description,
+        experienceYears: row.experience_years,
+        licenseNumber: row.license_number,
+        avatar: row.avatar,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    }
   }
 
   static async update(id: number, updates: Partial<Doctor>): Promise<Doctor | null> {

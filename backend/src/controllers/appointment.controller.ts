@@ -19,15 +19,23 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
 
   const { doctorId, serviceId, slotId, appointmentDate, visitType, symptoms } = req.body;
 
-  // Log request for debugging
-  console.log('Create appointment request:', {
-    userId: req.user.id,
-    role: req.user.role,
-    body: req.body,
-  });
-
   if (!doctorId || !serviceId || !slotId || !appointmentDate || !visitType) {
     throw new AppError('Vui lòng điền đầy đủ thông tin', 400);
+  }
+
+  // Normalize visitType to match database ENUM values
+  // Try multiple formats to match database schema
+  let normalizedVisitType: string;
+  if (visitType === 'first-visit' || visitType === 'first_visit' || visitType === 'firstvisit') {
+    // Try 'first_visit' first (most common in MySQL ENUM)
+    normalizedVisitType = 'first_visit';
+  } else if (visitType === 'follow-up' || visitType === 'follow_up' || visitType === 'followup') {
+    // Try 'follow_up' first (most common in MySQL ENUM)
+    normalizedVisitType = 'follow_up';
+  } else {
+    // If exact match doesn't work, try the value as-is
+    console.warn(`Unknown visitType format: ${visitType}, using as-is`);
+    normalizedVisitType = visitType;
   }
 
   // Get patient ID
@@ -46,20 +54,22 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
   }
 
   // Check lead time
-  const appointmentDateTime = new Date(appointmentDate);
-  const now = new Date();
+  let appointmentDateTime: Date;
+  try {
+    appointmentDateTime = new Date(appointmentDate);
+    if (isNaN(appointmentDateTime.getTime())) {
+      throw new AppError('Ngày giờ đặt lịch không hợp lệ', 400);
+    }
+  } catch (error) {
+    throw new AppError('Ngày giờ đặt lịch không hợp lệ', 400);
+  }
   
-  // Validate appointment date is not in the past
-  if (appointmentDateTime < now) {
+  const now = new Date();
+  const hoursUntilAppointment = differenceInHours(appointmentDateTime, now);
+  
+  if (hoursUntilAppointment < 0) {
     throw new AppError('Không thể đặt lịch trong quá khứ', 400);
   }
-  
-  // Validate appointment date is valid
-  if (isNaN(appointmentDateTime.getTime())) {
-    throw new AppError('Ngày giờ không hợp lệ', 400);
-  }
-  
-  const hoursUntilAppointment = differenceInHours(appointmentDateTime, now);
 
   if (hoursUntilAppointment < config.businessRules.minLeadTimeHours) {
     throw new AppError(
@@ -85,15 +95,6 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
 
   if (!timeSlot.isAvailable || timeSlot.patientCount >= timeSlot.capacity) {
     throw new AppError('Khung giờ này đã hết chỗ. Vui lòng chọn khung giờ khác.', 409);
-  }
-
-  // Validate time slot has required fields
-  if (!timeSlot.scheduleId) {
-    throw new AppError('Khung giờ không hợp lệ: thiếu thông tin lịch làm việc', 400);
-  }
-
-  if (!timeSlot.endTime) {
-    throw new AppError('Khung giờ không hợp lệ: thiếu thời gian kết thúc', 400);
   }
 
   // Verify service
@@ -135,110 +136,160 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Bạn đã có lịch hẹn vào khung giờ này. Vui lòng chọn khung giờ khác hoặc hủy lịch hẹn cũ trước.', 409);
   }
 
-  // Create appointment with PENDING status (waiting for staff confirmation)
-  let appointment;
+  // Use transaction with row locking to prevent race conditions
+  const connection = await pool.getConnection();
+  let appointment: any = null;
+
   try {
-    const appointmentData = {
-      patientId,
-      doctorId,
-      serviceId,
-      slotId,
-      scheduleId: timeSlot.scheduleId!,
-      appointmentDate: appointmentDateTime,
-      startTime: timeSlot.startTime,
-      endTime: timeSlot.endTime!,
-      visitType,
-      symptoms: symptoms || null,
-      status: 'pending' as const,
-    };
-    
-    console.log('Creating appointment with data:', {
-      ...appointmentData,
-      appointmentDate: appointmentData.appointmentDate instanceof Date 
-        ? appointmentData.appointmentDate.toISOString() 
-        : appointmentData.appointmentDate,
-    });
-    
-    appointment = await AppointmentModel.create(appointmentData);
-    
-    if (!appointment || !appointment.id) {
-      throw new AppError('Không thể tạo lịch hẹn: không nhận được ID từ database', 500);
+    await connection.beginTransaction();
+
+    // Lock time slot row to prevent concurrent modifications
+    const [slotRows] = await connection.query(
+      `SELECT * FROM time_slots WHERE id = ? FOR UPDATE`,
+      [slotId]
+    ) as any[];
+
+    const lockedSlot = slotRows?.[0];
+    if (!lockedSlot) {
+      await connection.rollback();
+      throw new AppError('Khung giờ không tồn tại', 404);
     }
-    
-    console.log('Appointment created successfully:', appointment.id);
+
+    // Re-check availability after locking
+    if (!lockedSlot.is_available || lockedSlot.patient_count >= lockedSlot.capacity) {
+      await connection.rollback();
+      throw new AppError('Khung giờ này đã hết chỗ. Vui lòng chọn khung giờ khác.', 409);
+    }
+
+    // Cleanup expired pending appointments for this slot (older than 10 minutes)
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const [expiredAppointments] = await connection.query(
+      `SELECT id FROM appointments 
+       WHERE slot_id = ? AND status = 'pending' AND created_at < ?`,
+      [slotId, tenMinutesAgo]
+    ) as any[];
+
+    if (expiredAppointments && expiredAppointments.length > 0) {
+      const expiredCount = expiredAppointments.length;
+      await connection.query(
+        `UPDATE time_slots 
+         SET patient_count = GREATEST(0, patient_count - ?),
+             is_available = CASE WHEN patient_count - ? < capacity THEN 1 ELSE 0 END,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [expiredCount, expiredCount, slotId]
+      );
+
+      await connection.query(
+        `UPDATE appointments 
+         SET status = 'cancelled', 
+             reason_cancel = 'Tự động hủy do quá thời gian chờ xác nhận',
+             updated_at = NOW()
+         WHERE slot_id = ? AND status = 'pending' AND created_at < ?`,
+        [slotId, tenMinutesAgo]
+      );
+    }
+
+    // Re-check slot availability after cleanup
+    const [updatedSlotRows] = await connection.query(
+      `SELECT * FROM time_slots WHERE id = ?`,
+      [slotId]
+    ) as any[];
+    const updatedSlot = updatedSlotRows?.[0];
+
+    if (updatedSlot && updatedSlot.patient_count >= updatedSlot.capacity) {
+      await connection.rollback();
+      throw new AppError('Khung giờ này đã hết chỗ. Vui lòng chọn khung giờ khác.', 409);
+    }
+
+    // Create appointment
+    const [insertResult] = await connection.query(
+      `INSERT INTO appointments 
+       (patient_id, doctor_id, service_id, slot_id, schedule_id, appointment_date, start_time, end_time, visit_type, symptoms, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        patientId,
+        doctorId,
+        serviceId,
+        slotId,
+        timeSlot.scheduleId,
+        appointmentDateTime,
+        timeSlot.startTime,
+        timeSlot.endTime,
+        normalizedVisitType,
+        symptoms || null,
+        'pending',
+      ]
+    ) as any;
+
+    const appointmentId = insertResult.insertId;
+
+    // Increment time slot patient count
+    await connection.query(
+      `UPDATE time_slots 
+       SET patient_count = patient_count + 1,
+           is_available = CASE WHEN patient_count + 1 >= capacity THEN 0 ELSE 1 END,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [slotId]
+    );
+
+    await connection.commit();
+
+    // Get created appointment
+    appointment = await AppointmentModel.findById(appointmentId);
+    if (!appointment) {
+      throw new AppError('Không thể lấy thông tin lịch hẹn sau khi tạo', 500);
+    }
   } catch (error: any) {
+    await connection.rollback();
+    if (error instanceof AppError) {
+      throw error;
+    }
+    // Log detailed error for debugging
     console.error('Error creating appointment:', {
       message: error.message,
       code: error.code,
       sqlMessage: error.sqlMessage,
-      sql: error.sql,
-      stack: error.stack,
+      sqlState: error.sqlState,
+      visitType: normalizedVisitType,
+      originalVisitType: visitType,
     });
-    
-    if (error.code === 'ER_DUP_ENTRY') {
-      throw new AppError('Lịch hẹn này đã tồn tại trong hệ thống', 409);
-    }
-    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      throw new AppError('Thông tin không hợp lệ. Vui lòng kiểm tra lại bác sĩ, dịch vụ hoặc khung giờ.', 400);
-    }
-    if (error.code === 'ER_BAD_NULL_ERROR') {
-      throw new AppError('Thiếu thông tin bắt buộc. Vui lòng kiểm tra lại.', 400);
-    }
-    
-    const errorMessage = error.sqlMessage || error.message || 'Lỗi không xác định';
-    throw new AppError(`Không thể tạo lịch hẹn: ${errorMessage}`, 500);
-  }
-
-  // Increment time slot
-  try {
-    await TimeSlotModel.incrementPatientCount(slotId);
-  } catch (error: any) {
-    console.error('Error incrementing time slot:', error);
-    // Rollback appointment if slot increment fails
-    if (appointment.id) {
-      try {
-        await pool.query('DELETE FROM appointments WHERE id = ?', [appointment.id]);
-      } catch (rollbackError) {
-        console.error('Error rolling back appointment:', rollbackError);
-      }
-    }
-    throw new AppError('Không thể cập nhật khung giờ. Vui lòng thử lại.', 500);
+    throw new AppError('Không thể tạo lịch hẹn: ' + (error.message || 'Lỗi không xác định'), 500);
+  } finally {
+    connection.release();
   }
 
   // Get patient and doctor info
-  let patient, doctor;
-  try {
-    const [patientRows] = await pool.query(
-      'SELECT p.*, u.email, u.id as user_id FROM patients p JOIN users u ON p.user_id = u.id WHERE p.id = ?',
-      [patientId]
-    ) as any[];
-    patient = patientRows[0];
-    
-    if (!patient) {
-      throw new AppError('Không tìm thấy thông tin bệnh nhân', 404);
-    }
-  } catch (error: any) {
-    console.error('Error fetching patient:', error);
-    throw new AppError('Không thể lấy thông tin bệnh nhân', 500);
+  const [patientRows] = await pool.query(
+    'SELECT p.*, u.email, u.id as user_id FROM patients p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?',
+    [patientId]
+  ) as any[];
+  const patient = patientRows?.[0];
+  
+  if (!patient) {
+    throw new AppError('Không tìm thấy thông tin bệnh nhân', 404);
   }
 
-  try {
-    const [doctorRows] = await pool.query(
-      'SELECT * FROM doctors WHERE id = ?',
-      [doctorId]
-    ) as any[];
-    doctor = doctorRows[0];
-    
-    if (!doctor) {
-      throw new AppError('Không tìm thấy thông tin bác sĩ', 404);
-    }
-  } catch (error: any) {
-    console.error('Error fetching doctor:', error);
-    throw new AppError('Không thể lấy thông tin bác sĩ', 500);
+  const [doctorRows] = await pool.query(
+    'SELECT * FROM doctors WHERE id = ?',
+    [doctorId]
+  ) as any[];
+  const doctor = doctorRows?.[0];
+  
+  if (!doctor) {
+    throw new AppError('Không tìm thấy thông tin bác sĩ', 404);
+  }
+
+  if (!appointment || !appointment.id) {
+    throw new AppError('Không thể tạo lịch hẹn', 500);
   }
 
   // Get full appointment details for notifications
   const fullAppointment = await AppointmentModel.findById(appointment.id);
+  if (!fullAppointment) {
+    throw new AppError('Không thể lấy thông tin lịch hẹn', 500);
+  }
 
   // Notify STAFF about new pending appointment
   try {
@@ -256,10 +307,12 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
   }
 
   // Send simple booking received email to patient (not confirmation yet)
+  // Use email from users table or fallback to patient.email field
+  const patientEmail = patient.email || (patient as any).email_fallback;
   try {
-    if (patient.email) {
+    if (patientEmail) {
       await emailService.sendBookingReceived({
-        to: patient.email,
+        to: patientEmail,
         patientName: patient.full_name,
         appointmentId: appointment.id,
         message: 'Lịch hẹn của bạn đang chờ xác nhận. Chúng tôi sẽ liên hệ trong vòng 2 giờ.',
@@ -370,16 +423,6 @@ export const confirmAppointment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Lịch hẹn này không thể xác nhận', 400);
   }
 
-  // Verify time slot is still available before confirming
-  const timeSlot = await TimeSlotModel.findById(appointment.slotId);
-  if (!timeSlot) {
-    throw new AppError('Khung giờ không tồn tại', 404);
-  }
-  
-  if (!timeSlot.isAvailable || timeSlot.patientCount >= timeSlot.capacity) {
-    throw new AppError('Khung giờ này đã hết chỗ. Không thể xác nhận lịch hẹn.', 409);
-  }
-
   const updated = await AppointmentModel.update(appointmentId, {
     status: 'confirmed',
     confirmedBy: req.user.id,
@@ -389,7 +432,7 @@ export const confirmAppointment = async (req: AuthRequest, res: Response) => {
   // Get appointment details for email
   const [appointmentDetails] = await pool.query(
     `SELECT a.*, 
-            p.full_name as patient_name, p.phone as patient_phone,
+            p.full_name as patient_name, p.phone as patient_phone, p.email as patient_email_fallback,
             d.full_name as doctor_name, d.speciality,
             s.name as service_name, s.price as service_price,
             u.email as patient_email
@@ -397,18 +440,18 @@ export const confirmAppointment = async (req: AuthRequest, res: Response) => {
      JOIN patients p ON a.patient_id = p.id
      JOIN doctors d ON a.doctor_id = d.id
      JOIN services s ON a.service_id = s.id
-     JOIN users u ON p.user_id = u.id
+     LEFT JOIN users u ON p.user_id = u.id
      WHERE a.id = ?`,
     [appointmentId]
   ) as any[];
   
-  const aptDetails = appointmentDetails[0];
+  const aptDetails = appointmentDetails?.[0];
 
   // Send confirmation email to patient
   try {
-    if (aptDetails.patient_email) {
+    if (aptDetails && (aptDetails.patient_email || aptDetails.patient_email_fallback)) {
       await emailService.sendAppointmentConfirmation({
-        to: aptDetails.patient_email,
+        to: aptDetails.patient_email || aptDetails.patient_email_fallback,
         patientName: aptDetails.patient_name,
         doctorName: aptDetails.doctor_name,
         serviceName: aptDetails.service_name,
@@ -421,15 +464,15 @@ export const confirmAppointment = async (req: AuthRequest, res: Response) => {
     console.error('Failed to send confirmation email:', error);
   }
 
-  // Gửi thông báo cho bệnh nhân
+  // Gửi thông báo cho bệnh nhân (chỉ nếu có user account)
   try {
     const [patientRows] = await pool.query(
-      'SELECT p.*, u.id as user_id FROM patients p JOIN users u ON p.user_id = u.id WHERE p.id = ?',
+      'SELECT p.*, u.id as user_id FROM patients p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?',
       [appointment.patientId]
     ) as any[];
-    const patient = patientRows[0];
+    const patient = patientRows?.[0];
 
-    if (patient) {
+    if (patient && patient.user_id) {
       emitNotification(patient.user_id, {
         type: 'appointment_confirmed',
         title: 'Lịch hẹn đã được xác nhận',
@@ -511,32 +554,36 @@ export const cancelAppointment = async (req: AuthRequest, res: Response) => {
   // Send cancellation email
   try {
     const [patientRows] = await pool.query(
-      'SELECT p.*, u.email FROM patients p JOIN users u ON p.user_id = u.id WHERE p.id = ?',
+      'SELECT p.*, p.email as email_fallback, u.email FROM patients p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?',
       [appointment.patientId]
     ) as any[];
-    const patient = patientRows[0];
+    const patient = patientRows?.[0];
+    
+    const patientEmail = patient?.email || patient?.email_fallback;
 
     const [doctorRows] = await pool.query(
       'SELECT * FROM doctors WHERE id = ?',
       [appointment.doctorId]
     ) as any[];
-    const doctor = doctorRows[0];
+    const doctor = doctorRows?.[0];
 
     const [serviceRows] = await pool.query(
       'SELECT * FROM services WHERE id = ?',
       [appointment.serviceId]
     ) as any[];
-    const service = serviceRows[0];
+    const service = serviceRows?.[0];
 
-    await emailService.sendAppointmentCancelled({
-      patientName: patient.full_name,
-      doctorName: doctor.full_name,
-      serviceName: service.name,
-      dateTime: `${format(new Date(appointment.appointmentDate), 'dd/MM/yyyy')} lúc ${appointment.startTime}`,
-      reason: reason || 'Không có',
-      cancellationFee,
-      patientEmail: patient.email,
-    });
+    if (patientEmail && patient && doctor && service) {
+      await emailService.sendAppointmentCancelled({
+        patientName: patient.full_name,
+        doctorName: doctor.full_name,
+        serviceName: service.name,
+        dateTime: `${format(new Date(appointment.appointmentDate), 'dd/MM/yyyy')} lúc ${appointment.startTime}`,
+        reason: reason || 'Không có',
+        cancellationFee,
+        patientEmail: patientEmail,
+      });
+    }
   } catch (error) {
     console.error('Failed to send cancellation email:', error);
   }
@@ -556,11 +603,6 @@ export const checkInAppointment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không có quyền truy cập', 403);
   }
 
-  // Only staff and admin can check-in patients
-  if (req.user.role !== 'staff' && req.user.role !== 'admin') {
-    throw new AppError('Chỉ nhân viên mới có thể thực hiện check-in', 403);
-  }
-
   const appointmentId = parseInt(req.params.id);
   const appointment = await AppointmentModel.findById(appointmentId);
 
@@ -570,17 +612,6 @@ export const checkInAppointment = async (req: AuthRequest, res: Response) => {
 
   if (appointment.status !== 'confirmed') {
     throw new AppError('Lịch hẹn phải được xác nhận trước khi check-in', 400);
-  }
-  
-  // Check if appointment date is today or in the past (allow check-in on appointment day)
-  const appointmentDate = new Date(appointment.appointmentDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const aptDate = new Date(appointmentDate);
-  aptDate.setHours(0, 0, 0, 0);
-  
-  if (aptDate > today) {
-    throw new AppError('Chỉ có thể check-in vào ngày hẹn hoặc sau ngày hẹn', 400);
   }
 
   const updated = await AppointmentModel.update(appointmentId, {

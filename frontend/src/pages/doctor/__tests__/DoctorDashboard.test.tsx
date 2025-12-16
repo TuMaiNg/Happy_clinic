@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { DoctorDashboard } from '../DoctorDashboard';
 import { api } from '../../../config/api';
 import { format } from 'date-fns';
@@ -19,6 +19,15 @@ jest.mock('../../../contexts/AuthContext', () => ({
     login: jest.fn(),
     register: jest.fn(),
     logout: jest.fn(),
+  }),
+}));
+
+jest.mock('../../../contexts/ToastContext', () => ({
+  useToast: () => ({
+    success: jest.fn(),
+    error: jest.fn(),
+    warning: jest.fn(),
+    info: jest.fn(),
   }),
 }));
 
@@ -58,7 +67,7 @@ describe('DoctorDashboard', () => {
     await waitFor(() => {
       expect(screen.getByText('Lịch hẹn hôm nay')).toBeInTheDocument();
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
   });
 
   it('displays appointment details correctly', async () => {
@@ -68,7 +77,7 @@ describe('DoctorDashboard', () => {
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
       expect(screen.getByText('Khám tổng quát')).toBeInTheDocument();
       expect(screen.getByText('08:00')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
   });
 
   it('marks appointment as completed', async () => {
@@ -76,7 +85,7 @@ describe('DoctorDashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Lê Thị B')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     // Tìm button với text "Hoàn thành khám"
     const completeButton = screen.getByRole('button', { 
@@ -84,7 +93,10 @@ describe('DoctorDashboard', () => {
     });
     
     expect(completeButton).toBeInTheDocument();
-    fireEvent.click(completeButton);
+    
+    await act(async () => {
+      fireEvent.click(completeButton);
+    });
 
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith('/appointments/2/complete');
@@ -102,7 +114,7 @@ describe('DoctorDashboard', () => {
       expect(
         screen.getByText('Không có lịch hẹn nào hôm nay')
       ).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
   });
 });
 

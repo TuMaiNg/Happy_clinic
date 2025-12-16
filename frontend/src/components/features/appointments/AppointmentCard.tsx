@@ -7,9 +7,10 @@ import {
   XMarkIcon,
   ClockIcon,
 } from '@heroicons/react/24/outline';
+import { Appointment } from '../../../services/appointment.service';
 
 interface AppointmentCardProps {
-  appointment: any;
+  appointment: Appointment;
   onViewDetails?: () => void;
   onCancel?: () => void;
   onReschedule?: () => void;
@@ -84,12 +85,12 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
 
           {/* Doctor Info */}
           <h3 className="text-lg font-semibold text-neutral-dark mb-2">
-            {(appointment as any).doctor_name || 'Bác sĩ'}
+            {appointment.doctor_name || 'Bác sĩ'}
           </h3>
 
           {/* Service Info */}
           <p className="text-sm text-neutral-medium mb-1">
-            Dịch vụ: {(appointment as any).service_name || 'N/A'}
+            Dịch vụ: {appointment.service_name || 'N/A'}
           </p>
 
           {/* Symptoms */}

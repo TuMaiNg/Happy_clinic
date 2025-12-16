@@ -31,13 +31,6 @@ export interface Appointment {
 
 export class AppointmentModel {
   static async create(appointment: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'>): Promise<Appointment> {
-    // Convert visitType from 'first-visit'/'follow-up' to 'first_visit'/'follow_up' for database
-    // Database uses underscore, but TypeScript uses hyphen
-    const visitTypeStr = appointment.visitType as string;
-    const visitTypeDb = visitTypeStr === 'first-visit' ? 'first_visit' : 
-                        visitTypeStr === 'follow-up' ? 'follow_up' : 
-                        visitTypeStr.replace(/-/g, '_');
-    
     const [result] = await pool.query(
       `INSERT INTO appointments 
        (patient_id, doctor_id, service_id, slot_id, schedule_id, appointment_date, start_time, end_time, visit_type, symptoms, status) 
@@ -51,7 +44,7 @@ export class AppointmentModel {
         appointment.appointmentDate,
         appointment.startTime,
         appointment.endTime,
-        visitTypeDb,
+        appointment.visitType,
         appointment.symptoms || null,
         appointment.status || 'pending',
       ]
@@ -59,7 +52,7 @@ export class AppointmentModel {
 
     const created = await this.findById(result.insertId);
     if (!created) {
-      throw new Error('Failed to create appointment');
+      throw new Error('Không thể tạo lịch hẹn');
     }
     return created;
   }
@@ -207,18 +200,8 @@ export class AppointmentModel {
     return this.findById(id);
   }
 
-  private static mapRowToAppointment(row: any): Appointment & {
-    patient_name?: string;
-    patient_phone?: string;
-    doctor_name?: string;
-    service_name?: string;
-  } {
-    const appointment: Appointment & {
-      patient_name?: string;
-      patient_phone?: string;
-      doctor_name?: string;
-      service_name?: string;
-    } = {
+  private static mapRowToAppointment(row: any): Appointment {
+    return {
       id: row.id,
       patientId: row.patient_id,
       doctorId: row.doctor_id,
@@ -228,10 +211,7 @@ export class AppointmentModel {
       appointmentDate: row.appointment_date,
       startTime: row.start_time,
       endTime: row.end_time,
-      // Convert visitType from database format (first_visit/follow_up) to TypeScript format (first-visit/follow-up)
-      visitType: (row.visit_type === 'first_visit' ? 'first-visit' :
-                  row.visit_type === 'follow_up' ? 'follow-up' :
-                  row.visit_type?.replace(/_/g, '-') || 'first-visit') as VisitType,
+      visitType: (row.visit_type === 'first_visit' ? 'first-visit' : row.visit_type === 'follow_up' ? 'follow-up' : row.visit_type) as VisitType,
       symptoms: row.symptoms,
       status: row.status,
       confirmedBy: row.confirmed_by,
@@ -246,14 +226,6 @@ export class AppointmentModel {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
-
-    // Include joined fields if present
-    if (row.patient_name) appointment.patient_name = row.patient_name;
-    if (row.patient_phone) appointment.patient_phone = row.patient_phone;
-    if (row.doctor_name) appointment.doctor_name = row.doctor_name;
-    if (row.service_name) appointment.service_name = row.service_name;
-
-    return appointment;
   }
 }
 

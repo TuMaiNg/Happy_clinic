@@ -60,8 +60,8 @@ export const ReportsPage: React.FC = () => {
         const response = await api.get(`/reports/revenue?fromDate=${fromDate}&toDate=${toDate}`);
         setRevenueStats(response.data.data);
       } else if (activeTab === 'doctors') {
-        const response = await api.get(`/reports/doctors?fromDate=${fromDate}&toDate=${toDate}`);
-        setDoctorPerformance(response.data.data);
+        const response = await api.get(`/reports/doctors-performance?fromDate=${fromDate}&toDate=${toDate}`);
+        setDoctorPerformance(response.data.data || []);
       }
     } catch (error) {
       console.error('Failed to load report data:', error);
@@ -238,6 +238,7 @@ export const ReportsPage: React.FC = () => {
     </div>
   );
 };
+
 
 
 

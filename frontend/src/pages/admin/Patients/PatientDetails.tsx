@@ -3,11 +3,13 @@ import { Modal } from '../../../components/common/Modal';
 
 interface Patient {
   id: number;
-  name: string;
+  fullName: string;
   phone: string;
   email?: string;
+  birthday?: string;
   date_of_birth?: string;
   address?: string;
+  name?: string; // For backward compatibility
 }
 
 interface PatientDetailsProps {
@@ -31,7 +33,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             </div>
             <div className="detail-item">
               <span className="detail-label">Tên:</span>
-              <span className="detail-value">{patient.name}</span>
+              <span className="detail-value">{patient.fullName || 'N/A'}</span>
             </div>
             <div className="detail-item">
               <span className="detail-label">Số điện thoại:</span>
@@ -43,11 +45,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 <span className="detail-value">{patient.email}</span>
               </div>
             )}
-            {patient.date_of_birth && (
+            {(patient.birthday || patient.date_of_birth) && (
               <div className="detail-item">
                 <span className="detail-label">Ngày sinh:</span>
                 <span className="detail-value">
-                  {new Date(patient.date_of_birth).toLocaleDateString('vi-VN')}
+                  {new Date(patient.birthday || patient.date_of_birth!).toLocaleDateString('vi-VN')}
                 </span>
               </div>
             )}
@@ -69,6 +71,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     </Modal>
   );
 };
+
 
 
 

@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../../contexts/AuthContext';
 import { doctorService } from '../../../services/doctor.service';
 import { serviceService } from '../../../services/service.service';
 import { timeslotService } from '../../../services/timeslot.service';
@@ -9,9 +8,11 @@ import { format, addDays } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { Button } from '../../common/Button';
 import { Card } from '../../common/Card';
+import { Input } from '../../common/Input';
 import { Modal } from '../../common/Modal';
-import { Calendar } from '../../common/Calendar';
 import { CheckCircleIcon, UserIcon, CalendarIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { Skeleton, SkeletonDoctorCard, SkeletonTimeSlot } from '../../common/Skeleton';
+import { useDebounce } from '../../../hooks/useDebounce';
 
 interface BookingWizardProps {
   onComplete?: () => void;
@@ -26,28 +27,82 @@ const steps = [
 
 export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [availableSlots, setAvailableSlots] = useState<any[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<any>(null);
   const [selectedService, setSelectedService] = useState<any>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
   const [symptoms, setSymptoms] = useState('');
   const [visitType, setVisitType] = useState<'first-visit' | 'follow-up'>('first-visit');
   const [loading, setLoading] = useState(false);
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
+  const [loadingServices, setLoadingServices] = useState(true);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [error, setError] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [appointmentId, setAppointmentId] = useState<number | null>(null);
   const [specialtyFilter, setSpecialtyFilter] = useState<string>('');
+  
+  // Debounce specialty filter to avoid too many API calls
+  const debouncedSpecialtyFilter = useDebounce(specialtyFilter, 300);
+
+  const loadDoctors = useCallback(async () => {
+    try {
+      setLoadingDoctors(true);
+      const response = await doctorService.getAll({
+        speciality: debouncedSpecialtyFilter || undefined,
+      });
+      setDoctors(response.data);
+    } catch (err: any) {
+      setError('Không thể tải danh sách bác sĩ');
+    } finally {
+      setLoadingDoctors(false);
+    }
+  }, [debouncedSpecialtyFilter]);
+
+  const loadServices = useCallback(async () => {
+    try {
+      setLoadingServices(true);
+      const response = await serviceService.getAll({ isActive: true });
+      setServices(response.data);
+    } catch (err: any) {
+      setError('Không thể tải danh sách dịch vụ');
+    } finally {
+      setLoadingServices(false);
+    }
+  }, []);
+
+  const loadAvailableSlots = useCallback(async () => {
+    if (!selectedDoctor || !selectedDate) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    try {
+      setLoadingSlots(true);
+      setError('');
+      const response = await timeslotService.getAvailable({
+        doctorId: selectedDoctor.id,
+        date: selectedDate,
+        serviceId: selectedService?.id,
+      });
+      setAvailableSlots(response.data || []);
+    } catch (err: any) {
+      console.error('Error loading slots:', err);
+      setError('Không thể tải khung giờ trống. Vui lòng thử lại.');
+      setAvailableSlots([]);
+    } finally {
+      setLoadingSlots(false);
+    }
+  }, [selectedDoctor, selectedDate, selectedService]);
 
   useEffect(() => {
     loadDoctors();
     loadServices();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadDoctors, loadServices]);
 
   useEffect(() => {
     if (selectedDoctor && selectedDate) {
@@ -55,74 +110,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
     } else {
       setAvailableSlots([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDoctor, selectedDate, selectedService]);
-
-  const loadDoctors = async () => {
-    try {
-      setError(''); // Clear previous errors
-      const response = await doctorService.getAll({
-        speciality: specialtyFilter || undefined,
-      });
-      
-      if (response.success && Array.isArray(response.data)) {
-        setDoctors(response.data);
-      } else {
-        setDoctors([]);
-        setError('Không thể tải danh sách bác sĩ');
-      }
-    } catch (err: any) {
-      console.error('Error loading doctors:', err);
-      setDoctors([]);
-      setError('Không thể tải danh sách bác sĩ. Vui lòng thử lại sau.');
-    }
-  };
-
-  const loadServices = async () => {
-    try {
-      setError(''); // Clear previous errors
-      const response = await serviceService.getAll({ isActive: true });
-      
-      if (response.success && Array.isArray(response.data)) {
-        setServices(response.data);
-      } else {
-        setServices([]);
-        setError('Không thể tải danh sách dịch vụ');
-      }
-    } catch (err: any) {
-      console.error('Error loading services:', err);
-      setServices([]);
-      setError('Không thể tải danh sách dịch vụ. Vui lòng thử lại sau.');
-    }
-  };
-
-  const loadAvailableSlots = async () => {
-    if (!selectedDoctor || !selectedDate) {
-      setAvailableSlots([]);
-      return;
-    }
-
-    try {
-      setError(''); // Clear previous errors
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      const response = await timeslotService.getAvailable({
-        doctorId: selectedDoctor.id,
-        date: dateStr,
-        serviceId: selectedService?.id,
-      });
-      
-      if (response.success && Array.isArray(response.data)) {
-        setAvailableSlots(response.data);
-      } else {
-        setAvailableSlots([]);
-      }
-    } catch (err: any) {
-      console.error('Error loading available slots:', err);
-      setAvailableSlots([]);
-      // Don't set error here as it might be a temporary issue
-      // Only show error if user tries to submit
-    }
-  };
+  }, [selectedDoctor, selectedDate, selectedService, loadAvailableSlots]);
 
   const handleNext = () => {
     if (currentStep === 1 && !selectedDoctor) {
@@ -151,76 +139,14 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
     setLoading(true);
 
     try {
-      // Check authentication
-      if (!isAuthenticated || !user) {
-        setError('Bạn cần đăng nhập để đặt lịch hẹn');
-        setLoading(false);
-        setTimeout(() => navigate('/login'), 2000);
-        return;
-      }
-
-      // Validate required fields
-      if (!selectedDoctor) {
-        setError('Vui lòng chọn bác sĩ');
-        setLoading(false);
-        return;
-      }
-      if (!selectedService) {
-        setError('Vui lòng chọn dịch vụ');
-        setLoading(false);
-        return;
-      }
-      if (!selectedDate) {
-        setError('Vui lòng chọn ngày');
-        setLoading(false);
-        return;
-      }
-      if (!selectedSlot) {
-        setError('Vui lòng chọn khung giờ');
+      if (!selectedSlot || !selectedDate) {
+        setError('Vui lòng chọn ngày và giờ');
         setLoading(false);
         return;
       }
 
-      // Validate slot is still available
-      if (!selectedSlot.isAvailable || selectedSlot.patientCount >= selectedSlot.capacity) {
-        setError('Khung giờ này đã hết chỗ. Vui lòng chọn khung giờ khác.');
-        setLoading(false);
-        // Reload available slots
-        await loadAvailableSlots();
-        return;
-      }
-
-      // Validate date is not in the past
-      const now = new Date();
-      const selectedDateTime = new Date(selectedDate);
-      selectedDateTime.setHours(0, 0, 0, 0);
-      const today = new Date(now);
-      today.setHours(0, 0, 0, 0);
-      
-      if (selectedDateTime < today) {
-        setError('Không thể đặt lịch trong quá khứ. Vui lòng chọn ngày khác.');
-        setLoading(false);
-        return;
-      }
-
-      // Parse time slot
       const [hours, minutes] = selectedSlot.startTime.split(':');
-      if (!hours || !minutes) {
-        setError('Khung giờ không hợp lệ. Vui lòng chọn lại.');
-        setLoading(false);
-        return;
-      }
-
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      const appointmentDateTime = `${dateStr}T${hours}:${minutes}:00`;
-      
-      // Validate appointment date is valid
-      const appointmentDateObj = new Date(appointmentDateTime);
-      if (isNaN(appointmentDateObj.getTime())) {
-        setError('Ngày giờ không hợp lệ. Vui lòng thử lại.');
-        setLoading(false);
-        return;
-      }
+      const appointmentDateTime = `${selectedDate}T${hours}:${minutes}:00`;
 
       const response = await appointmentService.create({
         doctorId: selectedDoctor.id,
@@ -231,62 +157,37 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
         symptoms: symptoms || undefined,
       });
 
-      // Đặt lịch thành công
-      if (response.success && response.data) {
-        const appointmentData = response.data as { id: number };
-        setAppointmentId(appointmentData.id);
-        setShowSuccessModal(true);
-        
-        if (onComplete) {
-          onComplete();
-        }
-      } else {
-        setError(response.message || 'Đặt lịch hẹn thất bại. Vui lòng thử lại.');
+      setAppointmentId(response.data.id);
+      setShowSuccessModal(true);
+      
+      if (onComplete) {
+        onComplete();
       }
     } catch (err: any) {
-      // Get error message from various sources
-      let errorMessage = 'Đã có lỗi xảy ra. Vui lòng thử lại sau.';
-      
-      if (err.message) {
-        errorMessage = err.message;
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.response?.data?.error) {
-        errorMessage = err.response.data.error;
-      } else if (err.response?.status === 403) {
-        errorMessage = 'Bạn cần đăng nhập để đặt lịch hẹn. Vui lòng đăng nhập và thử lại.';
-      } else if (err.response?.status === 404) {
-        if (err.response?.data?.message?.includes('bệnh nhân')) {
-          errorMessage = 'Không tìm thấy thông tin bệnh nhân. Vui lòng liên hệ quản trị viên.';
-        } else {
-          errorMessage = err.response?.data?.message || 'Không tìm thấy thông tin. Vui lòng thử lại.';
-        }
-      } else if (err.response?.status === 409) {
-        errorMessage = err.response?.data?.message || 'Khung giờ này không còn trống hoặc bạn đã có lịch hẹn vào thời gian này. Vui lòng chọn khung giờ khác.';
-      } else if (err.response?.status === 400) {
-        errorMessage = err.response?.data?.message || 'Thông tin không hợp lệ. Vui lòng kiểm tra lại.';
-      }
-      
+      console.error('Error creating appointment:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Đặt lịch hẹn thất bại. Vui lòng thử lại.';
       setError(errorMessage);
-      console.error('Booking error:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        fullError: err,
-      });
+      
+      // If slot is full, reload available slots
+      if (errorMessage.includes('hết chỗ') || errorMessage.includes('đã hết')) {
+        await loadAvailableSlots();
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const minDate = new Date();
-  const maxDate = addDays(new Date(), 30);
+  const minDate = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+  const maxDate = useMemo(() => format(addDays(new Date(), 30), 'yyyy-MM-dd'), []);
 
-  const filteredDoctors = specialtyFilter
-    ? doctors.filter(d => d.specialty === specialtyFilter)
-    : doctors;
+  const filteredDoctors = useMemo(() => {
+    if (!debouncedSpecialtyFilter) return doctors;
+    return doctors.filter(d => d.speciality === debouncedSpecialtyFilter);
+  }, [doctors, debouncedSpecialtyFilter]);
 
-  const doctorSpecialties = Array.from(new Set(doctors.map(d => d.specialty).filter(Boolean)));
+  const doctorSpecialties = useMemo(() => {
+    return Array.from(new Set(doctors.map(d => d.speciality).filter(Boolean)));
+  }, [doctors]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-warm-50 to-white py-8">
@@ -368,7 +269,6 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                   value={specialtyFilter}
                   onChange={(e) => {
                     setSpecialtyFilter(e.target.value);
-                    loadDoctors();
                   }}
                   className="input-field max-w-xs"
                 >
@@ -382,61 +282,69 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
               </div>
 
               {/* Doctor Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredDoctors.map((doctor) => (
-                  <Card
-                    key={doctor.id}
-                    hover
-                    onClick={() => {
-                      setSelectedDoctor(doctor);
-                      setCurrentStep(2);
-                    }}
-                    className={`${
-                      selectedDoctor?.id === doctor.id
-                        ? 'ring-2 ring-primary-500 border-primary-500'
-                        : ''
-                    }`}
-                  >
-                    <div className="flex flex-col items-center text-center">
-                      <div className="w-20 h-20 rounded-full bg-primary-50 flex items-center justify-center mb-4 border-4 border-primary-100">
-                        {doctor.avatar ? (
-                          <img
-                            src={doctor.avatar}
-                            alt={doctor.fullName}
-                            className="w-full h-full rounded-full object-cover"
-                          />
-                        ) : (
-                          <UserIcon className="w-10 h-10 text-primary-500" />
-                        )}
+              {loadingDoctors ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[...Array(6)].map((_, i) => (
+                    <SkeletonDoctorCard key={i} />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredDoctors.map((doctor) => (
+                    <Card
+                      key={doctor.id}
+                      hover
+                      onClick={() => {
+                        setSelectedDoctor(doctor);
+                        setCurrentStep(2);
+                      }}
+                      className={`${
+                        selectedDoctor?.id === doctor.id
+                          ? 'ring-2 ring-primary-500 border-primary-500'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex flex-col items-center text-center">
+                        <div className="w-20 h-20 rounded-full bg-primary-50 flex items-center justify-center mb-4 border-4 border-primary-100">
+                          {doctor.avatar ? (
+                            <img
+                              src={doctor.avatar}
+                              alt={doctor.fullName}
+                              className="w-full h-full rounded-full object-cover"
+                            />
+                          ) : (
+                            <UserIcon className="w-10 h-10 text-primary-500" />
+                          )}
+                        </div>
+                        <h3 className="text-lg font-semibold text-neutral-dark mb-1">
+                          {doctor.fullName}
+                        </h3>
+                        <p className="text-sm text-primary-500 font-medium mb-2">
+                          {doctor.speciality}
+                        </p>
+                        <div className="flex items-center text-xs text-neutral-medium mb-4">
+                          <span className="flex items-center mr-3">
+                            ⭐ 4.8
+                          </span>
+                          <span>{doctor.experienceYears || 0} năm KN</span>
+                        </div>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="w-full"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDoctor(doctor);
+                            setCurrentStep(2);
+                          }}
+                        >
+                          Chọn bác sĩ →
+                        </Button>
                       </div>
-                      <h3 className="text-lg font-semibold text-neutral-dark mb-1">
-                        {doctor.fullName}
-                      </h3>
-                      <p className="text-sm text-primary-500 font-medium mb-2">
-                        {doctor.specialty}
-                      </p>
-                      <div className="flex items-center text-xs text-neutral-medium mb-4">
-                        <span className="flex items-center mr-3">
-                          ⭐ 4.8
-                        </span>
-                        <span>{doctor.experienceYears || 0} năm KN</span>
-                      </div>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        className="w-full"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedDoctor(doctor);
-                          setCurrentStep(2);
-                        }}
-                      >
-                        Chọn bác sĩ →
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -469,7 +377,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                             {service.name}
                           </h3>
                           <p className="text-sm text-neutral-medium">
-                            {service.duration} phút · {service.description || service.specialty}
+                            {service.durationMinutes || service.duration} phút · {service.description || service.speciality || ''}
                           </p>
                         </div>
                       </div>
@@ -485,107 +393,136 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
 
           {/* Step 3: Select Date & Time */}
           {currentStep === 3 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Calendar */}
-              <div>
-                <h2 className="text-2xl font-semibold mb-4">Chọn ngày khám</h2>
-                <Calendar
-                  selectedDate={selectedDate || undefined}
-                  onDateSelect={(date) => {
-                    setSelectedDate(date);
-                    setSelectedSlot(null);
-                  }}
-                  minDate={minDate}
-                  maxDate={maxDate}
-                />
-                {selectedDate && (
-                  <div className="mt-4 p-3 bg-primary-50 rounded-lg">
-                    <p className="text-sm text-neutral-dark">
-                      <span className="font-medium">Ngày đã chọn:</span>{' '}
-                      <span className="text-primary-500 font-semibold">
-                        {format(selectedDate, 'dd/MM/yyyy, EEEE', { locale: vi })}
-                      </span>
-                    </p>
+            <Card className="p-6">
+              <div className="space-y-6">
+                {/* Date Selection */}
+                <div>
+                  <label className="block text-lg font-semibold text-neutral-dark mb-3">
+                    Chọn ngày
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      min={minDate}
+                      max={maxDate}
+                      value={selectedDate}
+                      onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                        setSelectedSlot(null);
+                        setError('');
+                      }}
+                      className="w-full px-4 py-3 text-lg border-2 border-neutral-border rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all bg-white"
+                    />
+                    <CalendarIcon className="absolute right-4 top-1/2 transform -translate-y-1/2 w-6 h-6 text-neutral-medium pointer-events-none" />
                   </div>
-                )}
-              </div>
-
-              {/* Time Slots */}
-              <div>
-                <h2 className="text-2xl font-semibold mb-4">
-                  Chọn giờ khám
                   {selectedDate && (
-                    <span className="text-sm font-normal text-neutral-medium ml-2">
-                      ({availableSlots.length} khung giờ trống)
-                    </span>
-                  )}
-                </h2>
-                {!selectedDate ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-neutral-medium">
-                    <CalendarIcon className="w-16 h-16 mb-4 text-neutral-border" />
-                    <p className="text-center">Vui lòng chọn ngày khám ở bên trái</p>
-                  </div>
-                ) : availableSlots.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-2">
-                    {availableSlots.map((slot) => {
-                      const remaining = slot.capacity - slot.patientCount;
-                      const isSelected = selectedSlot?.id === slot.id;
-                      const isFull = remaining === 0;
-
-                      return (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          onClick={() => !isFull && setSelectedSlot(slot)}
-                          disabled={isFull}
-                          className={`
-                            p-4 rounded-xl border-2 transition-all duration-200
-                            ${isSelected
-                              ? 'bg-primary-500 text-white border-primary-500 shadow-medium transform scale-105'
-                              : isFull
-                              ? 'bg-neutral-light text-neutral-medium border-neutral-border cursor-not-allowed opacity-60'
-                              : 'bg-white text-neutral-dark border-neutral-border hover:border-primary-500 hover:shadow-soft hover:scale-102'
-                            }
-                          `}
-                        >
-                          <div className="flex flex-col items-center">
-                            <div className={`text-lg font-bold mb-1 ${isSelected ? 'text-white' : 'text-primary-500'}`}>
-                              {slot.startTime.substring(0, 5)}
-                            </div>
-                            {!isFull ? (
-                              <div className={`text-xs ${isSelected ? 'text-white opacity-90' : 'text-neutral-medium'}`}>
-                                Còn {remaining}/{slot.capacity} chỗ
-                              </div>
-                            ) : (
-                              <div className="text-xs font-medium text-status-error">
-                                Đã đầy
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-12 text-neutral-medium">
-                    <ClockIcon className="w-16 h-16 mb-4 text-neutral-border" />
-                    <p className="text-center font-medium">Không có khung giờ trống</p>
-                    <p className="text-sm text-center mt-2">Vui lòng chọn ngày khác</p>
-                  </div>
-                )}
-
-                {selectedSlot && (
-                  <div className="mt-4 p-4 bg-secondary-50 border-l-4 border-secondary-500 rounded-lg">
-                    <p className="text-sm text-neutral-dark">
-                      <span className="font-medium">Giờ khám:</span>{' '}
-                      <span className="text-secondary-500 font-bold text-lg">
-                        {selectedSlot.startTime.substring(0, 5)} - {selectedSlot.endTime.substring(0, 5)}
-                      </span>
+                    <p className="mt-2 text-sm text-primary-600 font-medium">
+                      {format(new Date(selectedDate), 'EEEE, dd MMMM yyyy', { locale: vi })}
                     </p>
-                  </div>
-                )}
+                  )}
+                </div>
+
+                {/* Time Slots Selection */}
+                <div>
+                  <label className="block text-lg font-semibold text-neutral-dark mb-3">
+                    Chọn giờ
+                  </label>
+                  
+                  {!selectedDate ? (
+                    <div className="bg-neutral-light rounded-xl p-12 text-center border-2 border-dashed border-neutral-border">
+                      <ClockIcon className="w-16 h-16 text-neutral-medium mx-auto mb-4 opacity-50" />
+                      <p className="text-neutral-medium text-lg font-medium">
+                        Vui lòng chọn ngày trước
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {loadingSlots ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-96 overflow-y-auto pr-2">
+                          {[...Array(8)].map((_, i) => (
+                            <SkeletonTimeSlot key={i} />
+                          ))}
+                        </div>
+                      ) : availableSlots.length === 0 ? (
+                        <div className="bg-yellow-50 rounded-xl p-12 text-center border-2 border-yellow-200">
+                          <svg className="w-16 h-16 text-yellow-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <p className="text-yellow-800 font-medium text-lg mb-2">
+                            Không có khung giờ trống cho ngày này
+                          </p>
+                          <p className="text-yellow-600 text-sm">
+                            Vui lòng chọn ngày khác hoặc bác sĩ khác
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-96 overflow-y-auto pr-2">
+                          {availableSlots.map((slot) => {
+                            const remaining = slot.capacity - slot.patientCount;
+                            const isSelected = selectedSlot?.id === slot.id;
+                            const isFull = remaining === 0;
+                            const isLowCapacity = remaining > 0 && remaining <= slot.capacity * 0.3;
+
+                            return (
+                              <button
+                                key={slot.id}
+                                type="button"
+                                onClick={() => {
+                                  if (!isFull) {
+                                    setSelectedSlot(slot);
+                                    setError('');
+                                  }
+                                }}
+                                disabled={isFull}
+                                className={`
+                                  p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center min-h-[100px]
+                                  ${isSelected
+                                    ? 'bg-primary-500 text-white border-primary-500 shadow-lg transform scale-105 ring-4 ring-primary-200'
+                                    : isFull
+                                    ? 'bg-neutral-100 text-neutral-400 border-neutral-300 cursor-not-allowed opacity-60'
+                                    : isLowCapacity
+                                    ? 'bg-yellow-50 text-yellow-800 border-yellow-300 hover:border-yellow-500 hover:shadow-md hover:scale-102'
+                                    : 'bg-white text-neutral-dark border-neutral-border hover:border-primary-500 hover:shadow-md hover:scale-102 active:scale-100'
+                                  }
+                                `}
+                              >
+                                <div className={`text-xl font-bold mb-2 ${isSelected ? 'text-white' : isLowCapacity ? 'text-yellow-800' : 'text-primary-600'}`}>
+                                  {slot.startTime.substring(0, 5)}
+                                </div>
+                                <div className={`text-xs font-medium ${isSelected ? 'text-white opacity-90' : isLowCapacity ? 'text-yellow-700' : 'text-neutral-medium'}`}>
+                                  {!isFull ? (
+                                    <>
+                                      <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                                      Còn {remaining}/{slot.capacity} chỗ
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                                      Đã đầy
+                                    </>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      
+                      {selectedSlot && (
+                        <div className="mt-4 p-4 bg-primary-50 border-l-4 border-primary-500 rounded-lg">
+                          <p className="text-sm text-neutral-dark">
+                            <span className="font-semibold">Khung giờ đã chọn:</span>{' '}
+                            <span className="text-primary-700 font-bold text-lg">
+                              {selectedSlot.startTime.substring(0, 5)} - {selectedSlot.endTime.substring(0, 5)}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Step 4: Details & Confirmation */}
@@ -665,10 +602,10 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                     <div>
                       <p className="text-sm text-neutral-medium mb-1">Ngày & Giờ</p>
                       <p className="font-semibold text-lg text-secondary-500">
-                        {selectedDate && format(selectedDate, 'dd/MM/yyyy')}
+                        {selectedDate && format(new Date(selectedDate), 'dd/MM/yyyy')}
                       </p>
                       <p className="font-semibold text-lg text-secondary-500">
-                        {selectedSlot?.startTime?.substring(0, 5)} - {selectedSlot?.endTime?.substring(0, 5)}
+                        {selectedSlot?.startTime} - {selectedSlot?.endTime}
                       </p>
                     </div>
 
@@ -719,7 +656,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
         isOpen={showSuccessModal}
         onClose={() => {
           setShowSuccessModal(false);
-          navigate('/');
+          navigate('/appointments');
         }}
         size="md"
       >
@@ -733,22 +670,14 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
           <p className="text-neutral-medium mb-4">
             Mã lịch hẹn: <span className="font-mono font-semibold text-primary-500">#{appointmentId}</span>
           </p>
-          <div className="bg-warm-50 border-l-4 border-l-secondary-500 rounded-lg p-4 mb-6 text-left">
-            <p className="text-sm font-semibold text-secondary-600 mb-2">📋 Lịch hẹn đang chờ xác nhận</p>
-            <p className="text-sm text-neutral-medium mb-3">
-              Chúng tôi sẽ liên hệ với bạn trong vòng 2 giờ tới để xác nhận lịch hẹn.
+          <div className="bg-neutral-light rounded-lg p-4 mb-6 text-left">
+            <p className="text-sm text-neutral-medium mb-1">Bác sĩ: {selectedDoctor?.fullName}</p>
+            <p className="text-sm text-neutral-medium mb-1">
+              Ngày: {selectedDate && format(new Date(selectedDate), 'dd/MM/yyyy')}
             </p>
-            <div className="bg-white rounded-lg p-3 mt-3">
-              <p className="text-sm text-neutral-medium mb-1">
-                <span className="font-medium">Bác sĩ:</span> {selectedDoctor?.fullName}
-              </p>
-              <p className="text-sm text-neutral-medium mb-1">
-                <span className="font-medium">Ngày:</span> {selectedDate && format(selectedDate, 'dd/MM/yyyy')}
-              </p>
-              <p className="text-sm text-neutral-medium">
-                <span className="font-medium">Giờ:</span> {selectedSlot?.startTime?.substring(0, 5)} - {selectedSlot?.endTime?.substring(0, 5)}
-              </p>
-            </div>
+            <p className="text-sm text-neutral-medium">
+              Giờ: {selectedSlot?.startTime} - {selectedSlot?.endTime}
+            </p>
           </div>
           <div className="flex gap-4">
             <Button
@@ -766,10 +695,10 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
               className="flex-1"
               onClick={() => {
                 setShowSuccessModal(false);
-                navigate('/');
+                navigate('/appointments');
               }}
             >
-              Về trang chủ
+              Xem lịch hẹn
             </Button>
           </div>
         </div>

@@ -4,7 +4,7 @@ dotenv.config();
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT || '3000'),
+  port: parseInt(process.env.PORT || process.env.BACKEND_PORT || '3000'),
   
   database: {
     host: process.env.DB_HOST || 'localhost',
@@ -60,7 +60,7 @@ export const config = {
     cancellationFeePercent: parseInt(process.env.CANCELLATION_FEE_PERCENT || '20'),
     noShowFeePercent: parseInt(process.env.NO_SHOW_FEE_PERCENT || '100'),
     maxBookingDaysAhead: parseInt(process.env.MAX_BOOKING_DAYS_AHEAD || '30'),
-    slotDurationMinutes: parseInt(process.env.SLOT_DURATION_MINUTES || '30'),
+    slotDurationMinutes: parseInt(process.env.SLOT_DURATION_MINUTES || '5'),
   },
 };
 

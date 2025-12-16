@@ -1,12 +1,11 @@
 import axios from 'axios';
 
-// Force use port 3000 for backend (override .env if exists)
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+// API Base URL - check environment variable first
+// Note: Backend might be running on port 5000 (check .env file)
+// Set REACT_APP_API_URL in frontend/.env to override
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Log API URL for debugging
-if (process.env.NODE_ENV === 'development') {
-  console.log('🔗 API Base URL:', API_BASE_URL);
-}
+// API Base URL is logged only in development mode (already handled above)
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -35,14 +34,8 @@ api.interceptors.response.use(
   async (error) => {
     // Handle network errors
     if (!error.response) {
-      console.error('Network Error:', {
-        message: error.message,
-        code: error.code,
-        config: error.config,
-      });
-      
       // Provide more helpful error message
-      const networkError = new Error('Không thể kết nối đến server. Vui lòng kiểm tra:');
+      const networkError = new Error('Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.');
       (networkError as any).isNetworkError = true;
       (networkError as any).details = {
         url: error.config?.url,
@@ -66,11 +59,16 @@ api.interceptors.response.use(
             refreshToken,
           });
 
-          const { accessToken } = response.data.data.tokens;
-          localStorage.setItem('accessToken', accessToken);
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          // Validate response structure
+          if (response?.data?.success && response?.data?.data?.tokens?.accessToken) {
+            const { accessToken } = response.data.data.tokens;
+            localStorage.setItem('accessToken', accessToken);
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
 
-          return api(originalRequest);
+            return api(originalRequest);
+          } else {
+            throw new Error('Invalid refresh token response');
+          }
         }
       } catch (refreshError) {
         // Refresh failed, logout user

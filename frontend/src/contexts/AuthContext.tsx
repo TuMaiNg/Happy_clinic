@@ -28,16 +28,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (token) {
       // Decode token to get user info (basic implementation)
       try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        // Validate token format (should have 3 parts separated by dots)
+        const tokenParts = token.split('.');
+        if (tokenParts.length !== 3) {
+          throw new Error('Invalid token format');
+        }
+        
+        const payload = JSON.parse(atob(tokenParts[1]));
+        
+        // Validate payload has required fields
+        if (!payload.userId || !payload.email || !payload.role) {
+          throw new Error('Invalid token payload');
+        }
+        
         setUser({
           id: payload.userId,
           email: payload.email,
           role: payload.role,
         });
-      } catch (error) {
-        console.error('Error decoding token:', error);
+      } catch (err) {
+        // Invalid token - clear storage
+        console.error('Error decoding token:', err);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        setUser(null);
       }
     }
     setIsLoading(false);

@@ -2,7 +2,7 @@ import pool from '../config/database';
 
 export interface Patient {
   id?: number;
-  userId: number;
+  userId?: number;
   fullName: string;
   phone: string;
   email?: string;
@@ -21,7 +21,7 @@ export class PatientModel {
       `INSERT INTO patients (user_id, full_name, phone, email, birthday, gender, address, insurance_number, medical_history) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        patient.userId,
+        patient.userId || null,
         patient.fullName,
         patient.phone,
         patient.email || null,
@@ -40,7 +40,7 @@ export class PatientModel {
     const [rows] = await pool.query(
       `SELECT p.*, u.email, u.status 
        FROM patients p 
-       JOIN users u ON p.user_id = u.id 
+       LEFT JOIN users u ON p.user_id = u.id 
        WHERE p.id = ?`,
       [id]
     ) as any[];
@@ -60,15 +60,25 @@ export class PatientModel {
     return rows.length > 0 ? this.mapRowToPatient(rows[0]) : null;
   }
 
+  static async findByPhone(phone: string): Promise<Patient | null> {
+    const [rows] = await pool.query(
+      'SELECT * FROM patients WHERE phone = ?',
+      [phone]
+    ) as any[];
+
+    return rows.length > 0 ? this.mapRowToPatient(rows[0]) : null;
+  }
+
   static async findAll(filters?: { search?: string; limit?: number; offset?: number }): Promise<Patient[]> {
+    // Use LEFT JOIN because patient might not have user_id (walk-in patients)
     let query = `SELECT p.*, u.email, u.status 
                  FROM patients p 
-                 JOIN users u ON p.user_id = u.id 
+                 LEFT JOIN users u ON p.user_id = u.id 
                  WHERE 1=1`;
     const values: any[] = [];
 
     if (filters?.search) {
-      query += ` AND (p.full_name LIKE ? OR p.phone LIKE ? OR u.email LIKE ?)`;
+      query += ` AND (p.full_name LIKE ? OR p.phone LIKE ? OR COALESCE(u.email, p.email) LIKE ?)`;
       const searchTerm = `%${filters.search}%`;
       values.push(searchTerm, searchTerm, searchTerm);
     }

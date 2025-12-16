@@ -12,6 +12,9 @@ import pool from '../config/database';
  */
 export const verifyOTP = async (req: AuthRequest, res: Response): Promise<void> => {
   const appointmentId = parseInt(req.params.id);
+  if (isNaN(appointmentId) || appointmentId <= 0) {
+    throw new AppError('ID lịch hẹn không hợp lệ', 400);
+  }
   const { otp } = req.body;
 
   if (!otp || otp.length !== 6) {
@@ -58,7 +61,7 @@ export const verifyOTP = async (req: AuthRequest, res: Response): Promise<void> 
   try {
     await notificationService.sendAppointmentConfirmation(appointmentId);
   } catch (error) {
-    console.error('Failed to send confirmation notification:', error);
+    // Don't fail the request if notification fails
   }
 
   // Get updated appointment details
@@ -78,6 +81,9 @@ export const verifyOTP = async (req: AuthRequest, res: Response): Promise<void> 
  */
 export const resendOTP = async (req: AuthRequest, res: Response): Promise<void> => {
   const appointmentId = parseInt(req.params.id);
+  if (isNaN(appointmentId) || appointmentId <= 0) {
+    throw new AppError('ID lịch hẹn không hợp lệ', 400);
+  }
 
   // Get appointment and patient info
   const [rows] = await pool.query(
@@ -124,6 +130,9 @@ export const resendOTP = async (req: AuthRequest, res: Response): Promise<void> 
  */
 export const getOTPStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   const appointmentId = parseInt(req.params.id);
+  if (isNaN(appointmentId) || appointmentId <= 0) {
+    throw new AppError('ID lịch hẹn không hợp lệ', 400);
+  }
 
   const appointment = await AppointmentModel.findById(appointmentId);
   if (!appointment) {
@@ -146,6 +155,8 @@ export const getOTPStatus = async (req: AuthRequest, res: Response): Promise<voi
     },
   });
 };
+
+
 
 
 

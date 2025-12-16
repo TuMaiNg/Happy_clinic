@@ -127,6 +127,10 @@ class EmailService {
   }
 
   async sendAppointmentReminder(appointment: any) {
+    const email = appointment.to || appointment.patientEmail || appointment.email;
+    if (!email) {
+      throw new Error('No recipients defined');
+    }
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #0066CC;">⏰ Nhắc nhở lịch hẹn</h2>
@@ -141,7 +145,7 @@ class EmailService {
         <p>Trân trọng,<br>Happy Care Clinic</p>
       </div>
     `;
-    await this.sendEmail(appointment.patientEmail || appointment.email, 'Nhắc nhở lịch hẹn - Happy Care Clinic', html);
+    await this.sendEmail(email, 'Nhắc nhở lịch hẹn - Happy Care Clinic', html);
   }
 
   async sendAppointmentCancelled(appointment: any) {

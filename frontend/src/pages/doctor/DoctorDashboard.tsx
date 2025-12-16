@@ -3,6 +3,7 @@ import { api } from '../../config/api';
 import { format } from 'date-fns';
 import { CalendarIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { DoctorHeader } from './DoctorHeader';
+import { useToast } from '../../contexts/ToastContext';
 import './styles.css';
 
 interface Appointment {
@@ -16,11 +17,13 @@ interface Appointment {
 }
 
 export const DoctorDashboard: React.FC = () => {
+  const { success, error } = useToast();
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadTodayAppointments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadTodayAppointments = async () => {
@@ -43,9 +46,10 @@ export const DoctorDashboard: React.FC = () => {
             status: apt.status,
           }))
       );
-    } catch (error) {
-      console.error('Failed to load appointments:', error);
+    } catch (err: any) {
       setTodayAppointments([]);
+      // Show error toast
+      error('Không thể tải danh sách lịch hẹn hôm nay');
     } finally {
       setLoading(false);
     }
@@ -55,9 +59,10 @@ export const DoctorDashboard: React.FC = () => {
     try {
       await api.put(`/appointments/${id}/complete`);
       loadTodayAppointments();
-    } catch (error: any) {
-      console.error('Failed to complete appointment:', error);
-      alert(error.response?.data?.message || 'Không thể hoàn thành lịch hẹn');
+      success('Hoàn thành lịch hẹn thành công!');
+    } catch (err: any) {
+      console.error('Failed to complete appointment:', err);
+      error(err.response?.data?.message || 'Không thể hoàn thành lịch hẹn');
     }
   };
 

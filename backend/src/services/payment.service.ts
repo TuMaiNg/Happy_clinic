@@ -97,7 +97,6 @@ export class PaymentService {
           // Mock Stripe integration
           // In production, use real Stripe API
           transactionId = `STRIPE-${Date.now()}`;
-          console.log('Processing credit card payment:', cardDetails);
           break;
 
         case 'bank_transfer':
@@ -108,7 +107,6 @@ export class PaymentService {
         case 'insurance':
           // Submit insurance claim
           transactionId = `INS-${Date.now()}`;
-          console.log('Processing insurance claim:', insuranceInfo);
           break;
 
         default:

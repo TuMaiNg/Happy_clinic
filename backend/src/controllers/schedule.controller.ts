@@ -137,6 +137,9 @@ export const updateSchedule = async (req: AuthRequest, res: Response) => {
   }
 
   const scheduleId = parseInt(req.params.id);
+  if (isNaN(scheduleId) || scheduleId <= 0) {
+    throw new AppError('ID lịch làm việc không hợp lệ', 400);
+  }
   const schedule = await ScheduleModel.findById(scheduleId);
 
   if (!schedule) {
@@ -170,6 +173,9 @@ export const deleteSchedule = async (req: AuthRequest, res: Response) => {
   }
 
   const scheduleId = parseInt(req.params.id);
+  if (isNaN(scheduleId) || scheduleId <= 0) {
+    throw new AppError('ID lịch làm việc không hợp lệ', 400);
+  }
   const schedule = await ScheduleModel.findById(scheduleId);
 
   if (!schedule) {
@@ -220,8 +226,11 @@ export const generateSchedules = async (req: AuthRequest, res: Response) => {
       message: `Đã tạo lịch làm việc cho ${daysAhead} ngày tới`,
       data: results
     });
-  } catch (error) {
-    console.error('Schedule generation error:', error);
+  } catch (error: any) {
+    // Log error for debugging but don't expose details to client
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Schedule generation error:', error);
+    }
     throw new AppError('Không thể tạo lịch làm việc', 500);
   }
 };
@@ -267,8 +276,10 @@ export const generateDoctorSchedule = async (req: AuthRequest, res: Response) =>
         schedules
       }
     });
-  } catch (error) {
-    console.error('Doctor schedule generation error:', error);
+  } catch (error: any) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     throw new AppError('Không thể tạo lịch làm việc', 500);
   }
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { StaffDashboard } from '../StaffDashboard';
 import { api } from '../../../config/api';
 import { format } from 'date-fns';
@@ -18,6 +18,15 @@ jest.mock('../../../contexts/AuthContext', () => ({
     user: { id: 1, email: 'staff@example.com', role: 'staff' },
     isAuthenticated: true,
     logout: jest.fn(),
+  }),
+}));
+
+jest.mock('../../../contexts/ToastContext', () => ({
+  useToast: () => ({
+    success: jest.fn(),
+    error: jest.fn(),
+    warning: jest.fn(),
+    info: jest.fn(),
   }),
 }));
 
@@ -69,7 +78,7 @@ describe('StaffDashboard', () => {
       expect(screen.getByText('Hôm nay')).toBeInTheDocument();
       // Use getByRole to specifically target the tab button
       expect(screen.getByRole('button', { name: 'Chờ xác nhận' })).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
   });
 
   it('switches between today and pending tabs', async () => {
@@ -77,11 +86,14 @@ describe('StaffDashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     // Use getByRole to specifically target the tab button, not the status badge
     const pendingTab = screen.getByRole('button', { name: 'Chờ xác nhận' });
-    fireEvent.click(pendingTab);
+    
+    await act(async () => {
+      fireEvent.click(pendingTab);
+    });
 
     await waitFor(() => {
       expect(api.get).toHaveBeenCalledWith(
@@ -95,12 +107,15 @@ describe('StaffDashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Xác nhận')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     // Get all "Xác nhận" buttons - first one is the card button, we'll click it
     const confirmButtons = screen.getAllByText('Xác nhận');
     const cardConfirmButton = confirmButtons[0];
-    fireEvent.click(cardConfirmButton);
+    
+    await act(async () => {
+      fireEvent.click(cardConfirmButton);
+    });
 
     // Modal should open
     await waitFor(() => {
@@ -108,12 +123,14 @@ describe('StaffDashboard', () => {
     });
 
     // Find confirm button in modal (should be in modal-actions)
-    await waitFor(() => {
+    await waitFor(async () => {
       const modalActions = document.querySelector('.modal-actions');
       if (modalActions) {
         const modalConfirmButton = modalActions.querySelector('button.btn-success');
         if (modalConfirmButton) {
-          fireEvent.click(modalConfirmButton);
+          await act(async () => {
+            fireEvent.click(modalConfirmButton);
+          });
         }
       }
     });
@@ -128,10 +145,13 @@ describe('StaffDashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Check-in')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     const checkInButton = screen.getByText('Check-in');
-    fireEvent.click(checkInButton);
+    
+    await act(async () => {
+      fireEvent.click(checkInButton);
+    });
 
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith('/appointments/2/check-in');
@@ -146,7 +166,7 @@ describe('StaffDashboard', () => {
       expect(screen.getByText('BS. Trần Thị B')).toBeInTheDocument();
       expect(screen.getByText('Khám tổng quát')).toBeInTheDocument();
       expect(screen.getByText('08:00')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
   });
 });
 

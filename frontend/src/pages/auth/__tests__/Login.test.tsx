@@ -1,5 +1,5 @@
 import React from 'react';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '../../../test-utils';
 import { Login } from '../Login';
@@ -57,9 +57,11 @@ describe('Login Page', () => {
     const passwordInput = screen.getByPlaceholderText('••••••••');
     const submitButton = screen.getByRole('button', { name: /đăng nhập/i });
 
-    await userEvent.type(emailInput, 'test@example.com');
-    await userEvent.type(passwordInput, 'password123');
-    await userEvent.click(submitButton);
+    await act(async () => {
+      await userEvent.type(emailInput, 'test@example.com');
+      await userEvent.type(passwordInput, 'password123');
+      await userEvent.click(submitButton);
+    });
 
     await waitFor(() => {
       expect(screen.getByText(/đăng nhập thất bại/i)).toBeInTheDocument();

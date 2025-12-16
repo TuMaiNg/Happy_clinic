@@ -28,13 +28,16 @@ class NotificationService {
 
     // Send email
     try {
-      await emailService.sendAppointmentReminder({
-        patientName: appointment.patient_name,
-        doctorName: appointment.doctor_name,
-        appointmentDate: format(new Date(appointment.appointment_date), 'dd/MM/yyyy'),
-        dateTime: `${format(new Date(appointment.appointment_date), 'dd/MM/yyyy')} lúc ${appointment.start_time}`,
-        serviceName: appointment.service_name,
-      });
+      if (appointment.patient_email) {
+        await emailService.sendAppointmentReminder({
+          to: appointment.patient_email,
+          patientName: appointment.patient_name,
+          doctorName: appointment.doctor_name,
+          appointmentDate: format(new Date(appointment.appointment_date), 'dd/MM/yyyy'),
+          dateTime: `${format(new Date(appointment.appointment_date), 'dd/MM/yyyy')} lúc ${appointment.start_time}`,
+          serviceName: appointment.service_name,
+        });
+      }
     } catch (error) {
       console.error('Failed to send email reminder:', error);
     }

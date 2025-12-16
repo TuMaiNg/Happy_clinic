@@ -1,5 +1,8 @@
 import api from '../config/api';
 
+// Import API_BASE_URL for error messages
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 export interface RegisterRequest {
   email: string;
   password: string;
@@ -63,13 +66,13 @@ export const authService = {
       
       // Handle network errors
       if (error.isNetworkError || !error.response) {
-        const baseURL = error.details?.baseURL || 'http://localhost:3000/api';
+        const baseURL = error.details?.baseURL || API_BASE_URL || 'http://localhost:5000/api';
         throw new Error(
           `Không thể kết nối đến server.\n` +
           `URL: ${baseURL}/auth/login\n` +
           `Vui lòng kiểm tra:\n` +
           `1. Backend server có đang chạy không?\n` +
-          `2. Port có đúng không? (Backend: 3000, Frontend: 3001 hoặc khác)\n` +
+          `2. Port có đúng không? (Backend: 5000, Frontend: 3001 hoặc khác)\n` +
           `3. CORS có được cấu hình đúng không?`
         );
       }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../../config/api';
 import { format } from 'date-fns';
+import { useToast } from '../../../contexts/ToastContext';
 
 interface Payment {
   id: number;
@@ -12,20 +13,24 @@ interface Payment {
 }
 
 export const PaymentList: React.FC = () => {
+  const { success, error } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadPayments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadPayments = async () => {
     try {
       setLoading(true);
       const response = await api.get('/payments');
-      setPayments(response.data.data || []);
-    } catch (error) {
-      console.error('Failed to load payments:', error);
+      setPayments(response?.data?.data || response?.data || []);
+    } catch (err) {
+      console.error('Failed to load payments:', err);
+      setPayments([]);
+      error('Không thể tải danh sách thanh toán');
     } finally {
       setLoading(false);
     }
@@ -35,9 +40,9 @@ export const PaymentList: React.FC = () => {
     try {
       await api.put(`/payments/${id}/confirm`);
       loadPayments();
-    } catch (error: any) {
-      console.error('Failed to confirm payment:', error);
-      alert(error.response?.data?.message || 'Không thể xác nhận thanh toán');
+      success('Xác nhận thanh toán thành công!');
+    } catch (err: any) {
+      error(err.response?.data?.message || 'Không thể xác nhận thanh toán');
     }
   };
 

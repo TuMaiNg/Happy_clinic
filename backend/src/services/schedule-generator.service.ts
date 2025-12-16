@@ -1,286 +1,177 @@
-import pool from '../config/database';
-import { addDays, addMinutes, format, parse } from 'date-fns';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { DoctorModel } from '../models/Doctor';
+import { ScheduleModel } from '../models/Schedule';
+import { TimeSlotModel } from '../models/TimeSlot';
+import { config } from '../config/env';
+import { addDays, format, getDay } from 'date-fns';
 
-interface DoctorWorkingPattern {
-  doctorId: number;
-  workingDays: number[]; // 0=Sunday, 1=Monday, ..., 6=Saturday
-  startTime: string; // "08:00:00"
-  endTime: string; // "17:00:00"
-  lunchBreak?: {
-    start: string; // "12:00:00"
-    end: string; // "13:00:00"
-  };
-  maxPatientsPerSlot: number;
-  daysOff?: string[]; // ["2025-12-25", "2025-12-31"]
+interface GenerateResult {
+  doctorName: string;
+  schedulesCreated: number;
 }
 
-class ScheduleGeneratorService {
+interface SchedulePattern {
+  startTime: string;
+  endTime: string;
+  daysOfWeek?: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+}
+
+const defaultPattern: SchedulePattern = {
+  startTime: '08:00',
+  endTime: '12:00',
+  daysOfWeek: [1, 2, 3, 4, 5], // Monday to Friday
+};
+
+const afternoonPattern: SchedulePattern = {
+  startTime: '13:00',
+  endTime: '17:00',
+  daysOfWeek: [1, 2, 3, 4, 5], // Monday to Friday
+};
+
+/**
+ * Generate time slots for a schedule
+ */
+const generateTimeSlots = async (
+  scheduleId: number,
+  startTime: string,
+  endTime: string,
+  maxPatientsPerSlot: number = 1
+): Promise<void> => {
+  const [startHours, startMinutes] = startTime.split(':').map(Number);
+  const [endHours, endMinutes] = endTime.split(':').map(Number);
   
-  /**
-   * Generate schedules for a doctor for the next N days
-   */
-  async generateDoctorSchedules(
-    doctorId: number, 
-    daysAhead: number = 30,
-    pattern: DoctorWorkingPattern
-  ) {
-    const generatedSchedules = [];
-    const today = new Date();
-    
-    for (let i = 0; i < daysAhead; i++) {
-      const targetDate = addDays(today, i);
-      const dateString = format(targetDate, 'yyyy-MM-dd');
-      const dayOfWeek = targetDate.getDay();
-      
-      // Skip if not a working day
-      if (!pattern.workingDays.includes(dayOfWeek)) {
-        console.log(`Skip ${dateString} - not a working day`);
-        continue;
-      }
-      
-      // Skip if day-off
-      if (pattern.daysOff?.includes(dateString)) {
-        console.log(`Skip ${dateString} - marked as day-off`);
-        continue;
-      }
-      
-      // Check if schedule already exists
-      const existingSchedule = await this.getSchedule(doctorId, dateString);
-      if (existingSchedule) {
-        console.log(`Skip ${dateString} - schedule already exists`);
-        continue;
-      }
-      
-      // Create schedule
-      const schedule = await this.createSchedule({
+  const startTotalMinutes = startHours * 60 + startMinutes;
+  const endTotalMinutes = endHours * 60 + endMinutes;
+  const slotDuration = config.businessRules.slotDurationMinutes;
+
+  const slots: Array<{ startTime: string; endTime: string }> = [];
+
+  for (let currentMinutes = startTotalMinutes; currentMinutes < endTotalMinutes; currentMinutes += slotDuration) {
+    const slotStartHours = Math.floor(currentMinutes / 60);
+    const slotStartMinutes = currentMinutes % 60;
+    const slotEndMinutes = Math.min(currentMinutes + slotDuration, endTotalMinutes);
+    const slotEndHours = Math.floor(slotEndMinutes / 60);
+    const slotEndMins = slotEndMinutes % 60;
+
+    slots.push({
+      startTime: `${slotStartHours.toString().padStart(2, '0')}:${slotStartMinutes.toString().padStart(2, '0')}`,
+      endTime: `${slotEndHours.toString().padStart(2, '0')}:${slotEndMins.toString().padStart(2, '0')}`,
+    });
+  }
+
+  // Create time slots in database
+  for (const slot of slots) {
+    await TimeSlotModel.create({
+      scheduleId,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      patientCount: 0,
+      capacity: maxPatientsPerSlot,
+      isAvailable: true,
+    });
+  }
+};
+
+/**
+ * Generate schedules for a specific doctor
+ */
+export const generateDoctorSchedules = async (
+  doctorId: number,
+  daysAhead: number = 30,
+  pattern?: SchedulePattern | SchedulePattern[]
+): Promise<DoctorSchedule[]> => {
+  const doctor = await DoctorModel.findById(doctorId);
+  if (!doctor) {
+    throw new Error(`Doctor with ID ${doctorId} not found`);
+  }
+
+  const patterns: SchedulePattern[] = pattern
+    ? Array.isArray(pattern)
+      ? pattern
+      : [pattern]
+    : [defaultPattern, afternoonPattern]; // Default: morning and afternoon shifts
+
+  const schedules: DoctorSchedule[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < daysAhead; i++) {
+    const date = addDays(today, i);
+    const dayOfWeek = getDay(date); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+    // Check if schedule already exists for this date
+    const existing = await ScheduleModel.findByDoctorAndDate(doctorId, date);
+    if (existing) {
+      continue; // Skip if schedule already exists
+    }
+
+    // Find matching pattern for this day of week
+    const matchingPattern = patterns.find(
+      p => !p.daysOfWeek || p.daysOfWeek.includes(dayOfWeek)
+    );
+
+    if (matchingPattern) {
+      const schedule = await ScheduleModel.create({
         doctorId,
-        date: dateString,
-        startTime: pattern.startTime,
-        endTime: pattern.endTime,
+        date,
+        startTime: matchingPattern.startTime,
+        endTime: matchingPattern.endTime,
         isDayOff: false,
-        maxPatientsPerSlot: pattern.maxPatientsPerSlot
+        maxPatientsPerSlot: 1,
       });
-      
+
       // Generate time slots
-      const slots = await this.generateTimeSlots(
-        schedule.id,
-        pattern.startTime,
-        pattern.endTime,
-        pattern.lunchBreak
-      );
-      
-      generatedSchedules.push({
-        schedule,
-        slotsCount: slots.length
-      });
-      
-      console.log(`✓ Generated schedule for ${dateString} with ${slots.length} slots`);
-    }
-    
-    return generatedSchedules;
-  }
-  
-  /**
-   * Generate time slots for a schedule (30-minute intervals)
-   */
-  async generateTimeSlots(
-    scheduleId: number,
-    startTime: string,
-    endTime: string,
-    lunchBreak?: { start: string; end: string }
-  ) {
-    const slots = [];
-    const slotDuration = 30; // minutes
-    
-    const start = parse(startTime, 'HH:mm:ss', new Date());
-    const end = parse(endTime, 'HH:mm:ss', new Date());
-    
-    let currentTime = start;
-    
-    while (currentTime < end) {
-      const slotStart = format(currentTime, 'HH:mm:ss');
-      const slotEnd = format(addMinutes(currentTime, slotDuration), 'HH:mm:ss');
-      
-      // Skip lunch break
-      if (lunchBreak && this.isInLunchBreak(slotStart, lunchBreak)) {
-        currentTime = addMinutes(currentTime, slotDuration);
-        continue;
-      }
-      
-      // Create slot
-      const slot = await this.createTimeSlot({
-        scheduleId,
-        startTime: slotStart,
-        endTime: slotEnd,
-        patientCount: 0,
-        capacity: 1,
-        isAvailable: true
-      });
-      
-      slots.push(slot);
-      currentTime = addMinutes(currentTime, slotDuration);
-    }
-    
-    return slots;
-  }
-  
-  /**
-   * Generate schedules for all doctors
-   */
-  async generateAllDoctorSchedules(daysAhead: number = 30) {
-    const doctors = await this.getAllDoctors();
-    
-    // Define working patterns for each doctor
-    const patterns: Record<number, DoctorWorkingPattern> = {
-      1: { // Dr. Nguyễn Văn An (Nhi khoa)
-        doctorId: 1,
-        workingDays: [1, 2, 3, 4, 5], // Mon-Fri
-        startTime: "08:00:00",
-        endTime: "17:00:00",
-        lunchBreak: { start: "12:00:00", end: "13:00:00" },
-        maxPatientsPerSlot: 1,
-        daysOff: ["2025-12-25", "2025-12-31", "2026-01-01"]
-      },
-      2: { // Dr. Trần Thị Bình (Nội khoa)
-        doctorId: 2,
-        workingDays: [2, 3, 4, 5, 6], // Tue-Sat
-        startTime: "08:00:00",
-        endTime: "17:00:00",
-        lunchBreak: { start: "12:00:00", end: "13:00:00" },
-        maxPatientsPerSlot: 1,
-        daysOff: ["2025-12-25", "2025-12-31"]
-      },
-      3: { // Dr. Hoàng Văn Cường (Nha khoa)
-        doctorId: 3,
-        workingDays: [1, 3, 4, 5], // Mon, Wed, Thu, Fri
-        startTime: "09:00:00",
-        endTime: "17:00:00",
-        lunchBreak: { start: "12:00:00", end: "13:00:00" },
-        maxPatientsPerSlot: 1,
-        daysOff: ["2025-12-25", "2025-12-31"]
-      },
-      4: { // Dr. Phạm Thị Dung (Phụ khoa)
-        doctorId: 4,
-        workingDays: [1, 2, 3, 4, 5], // Mon-Fri
-        startTime: "08:00:00",
-        endTime: "17:00:00",
-        lunchBreak: { start: "12:00:00", end: "13:00:00" },
-        maxPatientsPerSlot: 1,
-        daysOff: ["2025-12-25", "2025-12-31"]
-      }
-    };
-    
-    const results = [];
-    
-    for (const doctor of doctors) {
-      const pattern = patterns[doctor.id];
-      
-      if (!pattern) {
-        console.warn(`No pattern defined for doctor ${doctor.id}`);
-        // Use default pattern
-        const defaultPattern: DoctorWorkingPattern = {
-          doctorId: doctor.id,
-          workingDays: [1, 2, 3, 4, 5], // Mon-Fri
-          startTime: "08:00:00",
-          endTime: "17:00:00",
-          lunchBreak: { start: "12:00:00", end: "13:00:00" },
-          maxPatientsPerSlot: 1,
-          daysOff: ["2025-12-25", "2025-12-31"]
-        };
-        
-        const schedules = await this.generateDoctorSchedules(
-          doctor.id,
-          daysAhead,
-          defaultPattern
+      if (schedule.id) {
+        await generateTimeSlots(
+          schedule.id,
+          matchingPattern.startTime,
+          matchingPattern.endTime,
+          1
         );
-        
-        results.push({
-          doctorId: doctor.id,
-          doctorName: doctor.full_name,
-          schedulesCreated: schedules.length
-        });
-        
-        continue;
       }
-      
-      const schedules = await this.generateDoctorSchedules(
-        doctor.id,
-        daysAhead,
-        pattern
-      );
-      
+
+      schedules.push(schedule);
+    }
+  }
+
+  return schedules;
+};
+
+/**
+ * Generate schedules for all active doctors
+ */
+export const generateAllDoctorSchedules = async (
+  daysAhead: number = 30
+): Promise<GenerateResult[]> => {
+  const doctors = await DoctorModel.findAll();
+
+  const results: GenerateResult[] = [];
+
+  for (const doctor of doctors) {
+    if (!doctor.id) continue;
+
+    try {
+      const schedules = await generateDoctorSchedules(doctor.id, daysAhead);
       results.push({
-        doctorId: doctor.id,
-        doctorName: doctor.full_name,
-        schedulesCreated: schedules.length
+        doctorName: doctor.fullName,
+        schedulesCreated: schedules.length,
+      });
+    } catch (error) {
+      console.error(`Error generating schedules for doctor ${doctor.fullName}:`, error);
+      results.push({
+        doctorName: doctor.fullName,
+        schedulesCreated: 0,
       });
     }
-    
-    return results;
   }
-  
-  /**
-   * Helper: Check if time is in lunch break
-   */
-  private isInLunchBreak(
-    time: string, 
-    lunchBreak: { start: string; end: string }
-  ): boolean {
-    return time >= lunchBreak.start && time < lunchBreak.end;
-  }
-  
-  /**
-   * Database operations
-   */
-  private async createSchedule(data: any) {
-    const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO doctor_schedules 
-       (doctor_id, date, start_time, end_time, is_day_off, max_patients_per_slot, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [data.doctorId, data.date, data.startTime, data.endTime, data.isDayOff, data.maxPatientsPerSlot]
-    );
-    
-    return {
-      id: result.insertId,
-      ...data
-    };
-  }
-  
-  private async createTimeSlot(data: any) {
-    const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO time_slots 
-       (schedule_id, start_time, end_time, patient_count, capacity, is_available, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [data.scheduleId, data.startTime, data.endTime, data.patientCount, data.capacity, data.isAvailable]
-    );
-    
-    return {
-      id: result.insertId,
-      ...data
-    };
-  }
-  
-  private async getSchedule(doctorId: number, date: string) {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT * FROM doctor_schedules WHERE doctor_id = ? AND date = ?`,
-      [doctorId, date]
-    );
-    return rows.length > 0 ? rows[0] : null;
-  }
-  
-  private async getAllDoctors() {
-    const [rows] = await pool.query<RowDataPacket[]>(`SELECT id, full_name FROM doctors`);
-    return rows;
-  }
-}
 
-export const scheduleGeneratorService = new ScheduleGeneratorService();
+  return results;
+};
 
+// Export service object
+export const scheduleGeneratorService = {
+  generateDoctorSchedules,
+  generateAllDoctorSchedules,
+};
 
-
-
-
-
-
-
+// Re-export types
+import { DoctorSchedule } from '../models/Schedule';

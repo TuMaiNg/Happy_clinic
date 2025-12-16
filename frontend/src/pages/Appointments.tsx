@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { appointmentService } from '../services/appointment.service';
+import { format } from 'date-fns';
 import { Layout } from '../components/layout/Layout';
 import { AppointmentCard } from '../components/features/appointments/AppointmentCard';
 import { CancelAppointmentModal } from '../components/features/appointments/CancelAppointmentModal';
@@ -16,7 +17,6 @@ export const Appointments: React.FC = () => {
 
   useEffect(() => {
     loadAppointments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   const loadAppointments = async () => {
@@ -48,6 +48,15 @@ export const Appointments: React.FC = () => {
       loadAppointments();
     } catch (err: any) {
       alert('Hủy lịch hẹn thất bại: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleCheckIn = async (id: number) => {
+    try {
+      await appointmentService.checkIn(id);
+      loadAppointments();
+    } catch (err: any) {
+      alert('Check-in thất bại: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -112,6 +121,7 @@ export const Appointments: React.FC = () => {
                   key={apt.id}
                   appointment={apt}
                   onCancel={() => handleCancelClick(apt)}
+                  onCheckIn={() => handleCheckIn(apt.id)}
                 />
               ))}
             </div>

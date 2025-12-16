@@ -3,6 +3,7 @@ import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { render } from '../../../test-utils';
 import { AppointmentList } from '../Appointments/AppointmentList';
 import { api } from '../../../config/api';
+import { ToastProvider } from '../../../contexts/ToastContext';
 
 jest.mock('../../../config/api', () => ({
   api: {
@@ -10,6 +11,18 @@ jest.mock('../../../config/api', () => ({
     put: jest.fn(),
     post: jest.fn(),
   },
+}));
+
+// Mock useAuth
+jest.mock('../../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 1, email: 'admin@test.com', role: 'admin' },
+    isAuthenticated: true,
+    isLoading: false,
+    login: jest.fn(),
+    register: jest.fn(),
+    logout: jest.fn(),
+  }),
 }));
 
 // Mock CreateAppointmentModal to avoid issues with its internal state
@@ -52,13 +65,17 @@ describe('AppointmentList', () => {
       data: { data: mockAppointments },
     });
     (api.put as jest.Mock).mockResolvedValue({ data: { success: true } });
-    // Mock window functions
+    // Mock window functions (not used anymore, but keep for compatibility)
     window.confirm = jest.fn(() => true);
     window.alert = jest.fn();
   });
 
   it('renders appointment list with filters', async () => {
-    render(<AppointmentList />);
+    render(
+      <ToastProvider>
+        <AppointmentList />
+      </ToastProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Quản lý lịch hẹn')).toBeInTheDocument();
@@ -67,7 +84,11 @@ describe('AppointmentList', () => {
   });
 
   it('filters appointments by status', async () => {
-    render(<AppointmentList />);
+    render(
+      <ToastProvider>
+        <AppointmentList />
+      </ToastProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Nguyễn Văn A')).toBeInTheDocument();
@@ -86,7 +107,11 @@ describe('AppointmentList', () => {
   it('confirms pending appointment', async () => {
     window.confirm = jest.fn(() => true);
 
-    render(<AppointmentList />);
+    render(
+      <ToastProvider>
+        <AppointmentList />
+      </ToastProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Xác nhận')).toBeInTheDocument();
@@ -101,25 +126,42 @@ describe('AppointmentList', () => {
   });
 
   it('cancels appointment with confirmation', async () => {
-    window.confirm = jest.fn(() => true);
-
-    render(<AppointmentList />);
+    render(
+      <ToastProvider>
+        <AppointmentList />
+      </ToastProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Hủy')).toBeInTheDocument();
     });
 
-    const cancelButton = screen.getByText('Hủy');
-    fireEvent.click(cancelButton);
+    // Get all "Hủy" buttons - the first one is the cancel button in the table
+    const cancelButtons = screen.getAllByText('Hủy');
+    const tableCancelButton = cancelButtons[0]; // First one is the table action button
+    fireEvent.click(tableCancelButton);
 
+    // Wait for ConfirmDialog to appear - look for the confirm button with text "Hủy lịch hẹn"
     await waitFor(() => {
-      expect(window.confirm).toHaveBeenCalled();
+      // The confirm button in dialog has text "Hủy lịch hẹn" (from confirmText prop)
+      const confirmButton = screen.queryByRole('button', { name: /hủy lịch hẹn/i });
+      if (confirmButton) {
+        fireEvent.click(confirmButton);
+      }
+    }, { timeout: 3000 });
+
+    // Wait for API call
+    await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith('/appointments/1/cancel');
     });
   });
 
   it('opens create appointment modal', async () => {
-    render(<AppointmentList />);
+    render(
+      <ToastProvider>
+        <AppointmentList />
+      </ToastProvider>
+    );
 
     const createButton = screen.getByText('+ Tạo lịch hẹn');
     fireEvent.click(createButton);

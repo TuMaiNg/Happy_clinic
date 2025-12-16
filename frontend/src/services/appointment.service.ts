@@ -22,8 +22,26 @@ export interface Appointment {
   visitType: string;
   symptoms?: string;
   status: string;
+  confirmedBy?: number;
+  confirmedAt?: string;
+  cancelledBy?: number;
+  cancelledAt?: string;
+  reasonCancel?: string;
+  cancellationFee?: number;
+  checkedInAt?: string;
+  completedAt?: string;
+  notes?: string;
   createdAt: string;
   updatedAt: string;
+  // Additional fields from JOIN queries
+  patient_name?: string;
+  patient_phone?: string;
+  doctor_name?: string;
+  doctor_speciality?: string;
+  service_name?: string;
+  service_price?: number;
+  slot_start_time?: string;
+  slot_end_time?: string;
 }
 
 export interface CreateAppointmentResponse {

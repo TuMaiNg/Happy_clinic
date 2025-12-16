@@ -5,7 +5,7 @@ import * as appointmentController from '../controllers/appointment.controller';
 
 const router = Router();
 
-router.post('/', authenticate, asyncHandler(appointmentController.createAppointment));
+router.post('/', authenticate, authorize('patient', 'staff', 'admin'), asyncHandler(appointmentController.createAppointment));
 router.get('/', authenticate, asyncHandler(appointmentController.getAppointments));
 router.get('/:id', authenticate, asyncHandler(appointmentController.getAppointmentById));
 

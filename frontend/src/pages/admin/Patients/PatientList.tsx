@@ -6,11 +6,13 @@ import '../shared/styles.css';
 
 interface Patient {
   id: number;
-  name: string;
+  fullName: string;
   phone: string;
   email?: string;
+  birthday?: string;
   date_of_birth?: string;
   address?: string;
+  name?: string; // For backward compatibility
 }
 
 export const PatientList: React.FC = () => {
@@ -85,12 +87,12 @@ export const PatientList: React.FC = () => {
               {patients.map((patient) => (
                 <tr key={patient.id}>
                   <td>#{patient.id}</td>
-                  <td>{patient.name}</td>
+                  <td>{patient.fullName || 'N/A'}</td>
                   <td>{patient.phone}</td>
                   <td>{patient.email || '-'}</td>
                   <td>
-                    {patient.date_of_birth
-                      ? new Date(patient.date_of_birth).toLocaleDateString('vi-VN')
+                    {(patient.birthday || patient.date_of_birth)
+                      ? new Date(patient.birthday || patient.date_of_birth!).toLocaleDateString('vi-VN')
                       : '-'}
                   </td>
                   <td>

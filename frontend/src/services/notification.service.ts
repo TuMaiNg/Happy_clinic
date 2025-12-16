@@ -21,7 +21,8 @@ export const notificationService = {
       socket.disconnect();
     }
 
-    socket = io(process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:3000', {
+    const socketUrl = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5000';
+    socket = io(socketUrl, {
       auth: { token },
     });
 

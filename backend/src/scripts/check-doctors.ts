@@ -79,3 +79,14 @@ async function checkDoctors() {
 
 checkDoctors();
 
+
+
+
+
+
+
+
+
+
+
+

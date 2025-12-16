@@ -23,7 +23,7 @@ jest.mock('../../config/api');
 const mockPatients = [
   {
     id: 1,
-    name: 'Nguyễn Văn A',
+    fullName: 'Nguyễn Văn A',
     phone: '0912345678',
     email: 'nguyenvana@example.com',
     date_of_birth: '1990-01-01',
@@ -88,7 +88,7 @@ describe('Patient Management Flow', () => {
 
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith('/patients', expect.objectContaining({
-        name: 'Lê Thị B',
+        fullName: 'Lê Thị B',
         phone: '0987654321',
       }));
     });

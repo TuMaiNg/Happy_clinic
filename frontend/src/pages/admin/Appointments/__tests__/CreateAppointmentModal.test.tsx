@@ -2,12 +2,25 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { CreateAppointmentModal } from '../CreateAppointmentModal';
 import { api } from '../../../../config/api';
+import { ToastProvider } from '../../../../contexts/ToastContext';
 
 jest.mock('../../../../config/api', () => ({
   api: {
     get: jest.fn(),
     post: jest.fn(),
   },
+}));
+
+// Mock useAuth
+jest.mock('../../../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 1, email: 'admin@test.com', role: 'admin' },
+    isAuthenticated: true,
+    isLoading: false,
+    login: jest.fn(),
+    register: jest.fn(),
+    logout: jest.fn(),
+  }),
 }));
 
 describe('CreateAppointmentModal', () => {
@@ -22,7 +35,11 @@ describe('CreateAppointmentModal', () => {
   it('renders modal with form', async () => {
     (api.get as jest.Mock).mockResolvedValue({ data: { data: [] } });
     
-    render(<CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+    render(
+      <ToastProvider>
+        <CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('Tạo lịch hẹn')).toBeInTheDocument();
@@ -32,7 +49,11 @@ describe('CreateAppointmentModal', () => {
   it('shows loading state while fetching data', () => {
     (api.get as jest.Mock).mockImplementation(() => new Promise(() => {}));
     
-    render(<CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+    render(
+      <ToastProvider>
+        <CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      </ToastProvider>
+    );
     
     expect(screen.getByText('Đang tải dữ liệu...')).toBeInTheDocument();
   });
@@ -45,7 +66,11 @@ describe('CreateAppointmentModal', () => {
       .mockResolvedValueOnce({ data: { data: mockDoctors } })
       .mockResolvedValueOnce({ data: { data: mockServices } });
     
-    render(<CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+    render(
+      <ToastProvider>
+        <CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('Dr. Smith')).toBeInTheDocument();
@@ -65,7 +90,11 @@ describe('CreateAppointmentModal', () => {
       .mockResolvedValueOnce({ data: { data: mockServices } })
       .mockResolvedValueOnce({ data: { data: mockSlots } });
     
-    render(<CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+    render(
+      <ToastProvider>
+        <CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('Dr. Smith')).toBeInTheDocument();
@@ -94,7 +123,11 @@ describe('CreateAppointmentModal', () => {
   it('has form with required fields', async () => {
     (api.get as jest.Mock).mockResolvedValue({ data: { data: [] } });
     
-    render(<CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+    render(
+      <ToastProvider>
+        <CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       // Check the form rendered
@@ -111,7 +144,11 @@ describe('CreateAppointmentModal', () => {
   it('closes modal when X button is clicked', async () => {
     (api.get as jest.Mock).mockResolvedValue({ data: { data: [] } });
     
-    render(<CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+    render(
+      <ToastProvider>
+        <CreateAppointmentModal onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('Tạo lịch hẹn')).toBeInTheDocument();

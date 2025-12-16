@@ -32,3 +32,17 @@ global.IntersectionObserver = class IntersectionObserver {
 
 // Mock window.alert
 window.alert = jest.fn();
+
+// Mock useToast globally
+jest.mock('./contexts/ToastContext', () => {
+  const React = require('react');
+  return {
+    ToastProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+    useToast: () => ({
+      success: jest.fn(),
+      error: jest.fn(),
+      warning: jest.fn(),
+      info: jest.fn(),
+    }),
+  };
+});

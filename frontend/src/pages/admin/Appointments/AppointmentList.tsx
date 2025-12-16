@@ -1,90 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { appointmentService, Appointment } from '../../../services/appointment.service';
 import { format } from 'date-fns';
-import { api } from '../../../config/api';
-import { AppointmentDetails } from './AppointmentDetails';
 import { CreateAppointmentModal } from './CreateAppointmentModal';
-import '../shared/styles.css';
-
-interface Appointment {
-  id: number;
-  patient_name: string;
-  patient_phone: string;
-  doctor_name: string;
-  service_name: string;
-  appointment_date: string;
-  start_time: string;
-  status: string;
-}
-
-interface Filters {
-  status: string;
-  date: string;
-  doctorId: string;
-  search: string;
-}
+import { AppointmentDetails } from './AppointmentDetails';
+import { useToast } from '../../../contexts/ToastContext';
 
 export const AppointmentList: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<Filters>({
-    status: 'all',
-    date: '',
-    doctorId: '',
-    search: '',
-  });
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const { success, error } = useToast();
 
-  useEffect(() => {
-    loadAppointments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.status, filters.date, filters.doctorId, filters.search]);
-
-  const loadAppointments = async () => {
+  const loadAppointments = useCallback(async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (filters.status !== 'all') params.append('status', filters.status);
-      if (filters.date) params.append('date', filters.date);
-      if (filters.doctorId) params.append('doctorId', filters.doctorId);
-      if (filters.search) params.append('search', encodeURIComponent(filters.search));
-
-      const queryString = params.toString();
-      const url = queryString ? `/appointments?${queryString}` : '/appointments';
-      const response = await api.get(url);
-      setAppointments(response.data.data || []);
-    } catch (error) {
-      console.error('Failed to load appointments:', error);
+      const response = await appointmentService.getAll({
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      });
+      setAppointments(response.data || []);
+    } catch (err: any) {
+      console.error('Error loading appointments:', err);
+      error(err.message || 'Không thể tải danh sách lịch hẹn');
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, error]);
+
+  useEffect(() => {
+    loadAppointments();
+  }, [loadAppointments]);
 
   const handleConfirm = async (id: number) => {
     try {
-      await api.put(`/appointments/${id}/confirm`);
+      await appointmentService.confirm(id);
+      success('Đã xác nhận lịch hẹn thành công');
       loadAppointments();
-    } catch (error) {
-      console.error('Failed to confirm appointment:', error);
-      alert('Không thể xác nhận lịch hẹn');
+    } catch (err: any) {
+      error(err.message || 'Không thể xác nhận lịch hẹn');
     }
   };
 
-  const handleCancel = async (id: number) => {
-    if (!window.confirm('Bạn có chắc muốn hủy lịch hẹn này?')) {
-      return;
-    }
+  const handleCancel = async (id: number, reason?: string) => {
     try {
-      await api.put(`/appointments/${id}/cancel`);
+      await appointmentService.cancel(id, reason);
+      success('Đã hủy lịch hẹn thành công');
       loadAppointments();
-    } catch (error) {
-      console.error('Failed to cancel appointment:', error);
-      alert('Không thể hủy lịch hẹn');
+    } catch (err: any) {
+      error(err.message || 'Không thể hủy lịch hẹn');
     }
   };
 
-  const getStatusLabel = (status: string): string => {
-    const labels: Record<string, string> = {
+  const handleCheckIn = async (id: number) => {
+    try {
+      await appointmentService.checkIn(id);
+      success('Đã check-in thành công');
+      loadAppointments();
+    } catch (err: any) {
+      error(err.message || 'Không thể check-in');
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    const statusMap: { [key: string]: string } = {
       pending: 'Chờ xác nhận',
       confirmed: 'Đã xác nhận',
       'checked-in': 'Đã check-in',
@@ -92,153 +71,139 @@ export const AppointmentList: React.FC = () => {
       cancelled: 'Đã hủy',
       'no-show': 'Vắng mặt',
     };
-    return labels[status] || status;
+    return statusMap[status] || status;
   };
 
-  const getStatusClass = (status: string): string => {
-    const classes: Record<string, string> = {
-      pending: 'badge-warning',
-      confirmed: 'badge-info',
-      'checked-in': 'badge-primary',
-      completed: 'badge-success',
-      cancelled: 'badge-danger',
-      'no-show': 'badge-secondary',
+  const getStatusColor = (status: string) => {
+    const colorMap: { [key: string]: string } = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      confirmed: 'bg-blue-100 text-blue-800',
+      'checked-in': 'bg-green-100 text-green-800',
+      completed: 'bg-gray-100 text-gray-800',
+      cancelled: 'bg-red-100 text-red-800',
+      'no-show': 'bg-orange-100 text-orange-800',
     };
-    return classes[status] || 'badge-secondary';
+    return colorMap[status] || 'bg-gray-100 text-gray-800';
   };
 
   return (
-    <div className="appointments-page">
-      <div className="page-header">
-        <div>
-          <h1>Quản lý lịch hẹn</h1>
-          <p className="text-muted">Xem và quản lý tất cả lịch hẹn</p>
-        </div>
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Quản lý lịch hẹn</h1>
         <button
-          className="btn btn-primary"
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => setCreateModalOpen(true)}
+          className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
         >
-          + Tạo lịch hẹn
+          Tạo lịch hẹn mới
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="filters-bar">
+      <div className="mb-4">
         <select
-          value={filters.status}
-          onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-          className="filter-select"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-4 py-2 border rounded-lg"
         >
           <option value="all">Tất cả trạng thái</option>
           <option value="pending">Chờ xác nhận</option>
           <option value="confirmed">Đã xác nhận</option>
+          <option value="checked-in">Đã check-in</option>
           <option value="completed">Hoàn thành</option>
           <option value="cancelled">Đã hủy</option>
         </select>
-
-        <input
-          type="date"
-          value={filters.date}
-          onChange={(e) => setFilters({ ...filters, date: e.target.value })}
-          className="filter-input"
-        />
-
-        <input
-          type="search"
-          placeholder="Tìm bệnh nhân..."
-          value={filters.search}
-          onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-          className="filter-search"
-        />
       </div>
 
-      {/* Table */}
-      <div className="table-container">
-        {loading ? (
-          <div className="table-loading">
-            <div className="loading-spinner"></div>
-            <p>Đang tải...</p>
-          </div>
-        ) : appointments.length === 0 ? (
-          <div className="table-empty">
-            <p>Không có lịch hẹn nào</p>
-          </div>
-        ) : (
-          <table className="data-table">
-            <thead>
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
+        </div>
+      ) : appointments.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500">Không có lịch hẹn nào</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <th>Mã LH</th>
-                <th>Bệnh nhân</th>
-                <th>Bác sĩ</th>
-                <th>Dịch vụ</th>
-                <th>Ngày giờ</th>
-                <th>Trạng thái</th>
-                <th>Hành động</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bệnh nhân</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bác sĩ</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dịch vụ</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày giờ</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
               </tr>
             </thead>
-            <tbody>
-              {appointments.map((appt) => (
-                <tr key={appt.id}>
-                  <td>#{appt.id}</td>
-                  <td>
-                    <div className="patient-cell">
-                      <div className="patient-name">
-                        {appt.patient_name || 'N/A'}
-                      </div>
-                      <div className="patient-phone">
-                        {appt.patient_phone || 'N/A'}
-                      </div>
-                    </div>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {appointments.map((apt) => (
+                <tr key={apt.id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{apt.id}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {apt.patient_name || 'N/A'}
                   </td>
-                  <td>{appt.doctor_name || 'N/A'}</td>
-                  <td>{appt.service_name || 'N/A'}</td>
-                  <td>
-                    <div>
-                      {appt.appointment_date
-                        ? format(new Date(appt.appointment_date), 'dd/MM/yyyy')
-                        : 'N/A'}
-                    </div>
-                    <div className="text-muted">
-                      {appt.start_time || 'N/A'}
-                    </div>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {apt.doctor_name || 'N/A'}
                   </td>
-                  <td>
-                    <span className={`badge ${getStatusClass(appt.status)}`}>
-                      {getStatusLabel(appt.status)}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {apt.service_name || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {format(new Date(apt.appointmentDate), 'dd/MM/yyyy HH:mm')}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(apt.status)}`}>
+                      {getStatusText(apt.status)}
                     </span>
                   </td>
-                  <td>
-                    <div className="action-buttons">
-                      {appt.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => handleConfirm(appt.id)}
-                            className="btn-sm btn-success"
-                          >
-                            Xác nhận
-                          </button>
-                          <button
-                            onClick={() => handleCancel(appt.id)}
-                            className="btn-sm btn-danger"
-                          >
-                            Hủy
-                          </button>
-                        </>
-                      )}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                    <button
+                      onClick={() => setSelectedAppointment(apt)}
+                      className="text-blue-600 hover:text-blue-900"
+                    >
+                      Chi tiết
+                    </button>
+                    {apt.status === 'pending' && (
                       <button
-                        className="btn-sm btn-secondary"
-                        onClick={() => setSelectedAppointment(appt)}
+                        onClick={() => handleConfirm(apt.id!)}
+                        className="text-green-600 hover:text-green-900"
                       >
-                        Chi tiết
+                        Xác nhận
                       </button>
-                    </div>
+                    )}
+                    {apt.status === 'confirmed' && (
+                      <button
+                        onClick={() => handleCheckIn(apt.id!)}
+                        className="text-purple-600 hover:text-purple-900"
+                      >
+                        Check-in
+                      </button>
+                    )}
+                    {['pending', 'confirmed'].includes(apt.status) && (
+                      <button
+                        onClick={() => handleCancel(apt.id!)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Hủy
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
+
+      {createModalOpen && (
+        <CreateAppointmentModal
+          onClose={() => setCreateModalOpen(false)}
+          onSuccess={() => {
+            setCreateModalOpen(false);
+            loadAppointments();
+          }}
+        />
+      )}
 
       {selectedAppointment && (
         <AppointmentDetails
@@ -247,17 +212,6 @@ export const AppointmentList: React.FC = () => {
           onUpdate={loadAppointments}
         />
       )}
-
-      {showCreateModal && (
-        <CreateAppointmentModal
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            setShowCreateModal(false);
-            loadAppointments();
-          }}
-        />
-      )}
     </div>
   );
 };
-

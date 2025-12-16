@@ -159,12 +159,12 @@ export const confirmPayment = async (req: AuthRequest, res: Response) => {
   const appointment = await AppointmentModel.findById(payment.appointmentId);
   if (appointment) {
     const [patientRows] = await (await import('../config/database')).default.query(
-      'SELECT p.*, u.id as user_id, u.email FROM patients p JOIN users u ON p.user_id = u.id WHERE p.id = ?',
+      'SELECT p.*, u.id as user_id, u.email FROM patients p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?',
       [appointment.patientId]
     ) as any[];
-    const patient = patientRows[0];
+    const patient = patientRows?.[0];
 
-    if (patient) {
+    if (patient && patient.user_id) {
       emitNotification(patient.user_id, {
         type: 'payment',
         title: 'Thanh toán đã được xác nhận',

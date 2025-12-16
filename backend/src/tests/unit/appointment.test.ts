@@ -39,7 +39,9 @@ describe('Appointment Controller', () => {
         doctorId: 1,
         serviceId: 1,
         slotId: 1,
+        scheduleId: 1, // Add scheduleId
         appointmentDate: appointmentDate.toISOString(),
+        visitTime: '08:00:00', // Add start time
         visitType: 'first-visit',
         symptoms: 'Sốt cao',
       };
@@ -79,17 +81,32 @@ describe('Appointment Controller', () => {
       (ServiceModel.findById as jest.Mock).mockResolvedValue(mockService);
       (PatientModel.findByUserId as jest.Mock).mockResolvedValue(mockPatient);
       (AppointmentModel.findAll as jest.Mock).mockResolvedValue([]);
-      (AppointmentModel.create as jest.Mock).mockResolvedValue(mockAppointment);
-      (TimeSlotModel.incrementPatientCount as jest.Mock).mockResolvedValue(undefined);
+      (AppointmentModel.findById as jest.Mock).mockResolvedValue(mockAppointment); // Mock findById after creation
 
-      // Mock pool.query for patient/doctor lookup
+      // Mock pool connection for transaction
       const pool = require('../../config/database').default;
-      pool.query = jest.fn().mockResolvedValue([[]]);
+      const mockConnection = {
+        beginTransaction: jest.fn().mockResolvedValue(undefined),
+        commit: jest.fn().mockResolvedValue(undefined),
+        rollback: jest.fn().mockResolvedValue(undefined),
+        query: jest.fn()
+          .mockResolvedValueOnce([[{ id: 1, is_available: 1, patient_count: 0, capacity: 3, schedule_id: 1 }]]) // SELECT FOR UPDATE
+          .mockResolvedValueOnce([{ insertId: 1 }]) // INSERT appointment
+          .mockResolvedValueOnce([{ affectedRows: 1 }]), // UPDATE time slot
+        release: jest.fn(),
+      };
+      pool.getConnection = jest.fn().mockResolvedValue(mockConnection);
+      
+      // Mock pool.query for patient/doctor lookup (after transaction)
+      pool.query = jest.fn()
+        .mockResolvedValueOnce([[{ id: 1, user_id: 1, email: 'patient@test.com', fullName: 'Nguyễn Văn A' }]]) // Patient lookup
+        .mockResolvedValueOnce([[{ id: 1, fullName: 'Bác sĩ A', speciality: 'Nội khoa' }]]); // Doctor lookup
 
       await createAppointment(mockRequest, mockResponse);
 
-      expect(AppointmentModel.create).toHaveBeenCalled();
-      expect(TimeSlotModel.incrementPatientCount).toHaveBeenCalledWith(1);
+      expect(mockConnection.beginTransaction).toHaveBeenCalled();
+      expect(mockConnection.commit).toHaveBeenCalled();
+      expect(AppointmentModel.findById).toHaveBeenCalledWith(1);
       expect(mockResponse.status).toHaveBeenCalledWith(201);
     });
 
@@ -329,6 +346,8 @@ describe('Appointment Controller', () => {
         status: 'confirmed',
       };
 
+      // Set user role to staff for check-in permission
+      mockRequest.user = { id: 1, role: 'staff' };
       mockRequest.params = { id: '1' };
       (AppointmentModel.findById as jest.Mock).mockResolvedValue(mockAppointment);
       (AppointmentModel.update as jest.Mock).mockResolvedValue({
@@ -357,6 +376,8 @@ describe('Appointment Controller', () => {
         status: 'pending', // Must be confirmed first
       };
 
+      // Set user role to staff for check-in permission
+      mockRequest.user = { id: 1, role: 'staff' };
       mockRequest.params = { id: '1' };
       (AppointmentModel.findById as jest.Mock).mockResolvedValue(mockAppointment);
 
@@ -368,6 +389,7 @@ describe('Appointment Controller', () => {
     });
   });
 });
+
 
 
 

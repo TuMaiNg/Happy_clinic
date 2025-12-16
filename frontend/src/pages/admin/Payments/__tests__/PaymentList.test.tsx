@@ -3,8 +3,21 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PaymentList } from '../PaymentList';
 import { api } from '../../../../config/api';
+import { ToastProvider } from '../../../../contexts/ToastContext';
 
 jest.mock('../../../../config/api');
+
+// Mock useAuth
+jest.mock('../../../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 1, email: 'admin@test.com', role: 'admin' },
+    isAuthenticated: true,
+    isLoading: false,
+    login: jest.fn(),
+    register: jest.fn(),
+    logout: jest.fn(),
+  }),
+}));
 
 describe('PaymentList', () => {
   beforeEach(() => {
@@ -13,7 +26,11 @@ describe('PaymentList', () => {
 
   it('renders loading state initially', () => {
     (api.get as jest.Mock).mockImplementation(() => new Promise(() => {}));
-    const { container } = render(<PaymentList />);
+    const { container } = render(
+      <ToastProvider>
+        <PaymentList />
+      </ToastProvider>
+    );
     // Component hiển thị loading spinner, không có text "đang tải"
     expect(container.querySelector('.loading-spinner')).toBeInTheDocument();
   });
@@ -39,7 +56,11 @@ describe('PaymentList', () => {
     ];
     (api.get as jest.Mock).mockResolvedValue({ data: { data: mockPayments } });
     
-    render(<PaymentList />);
+    render(
+      <ToastProvider>
+        <PaymentList />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('#100')).toBeInTheDocument();
@@ -50,7 +71,11 @@ describe('PaymentList', () => {
   it('renders empty state when no payments', async () => {
     (api.get as jest.Mock).mockResolvedValue({ data: { data: [] } });
     
-    render(<PaymentList />);
+    render(
+      <ToastProvider>
+        <PaymentList />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('Không có thanh toán nào')).toBeInTheDocument();
@@ -70,7 +95,11 @@ describe('PaymentList', () => {
     ];
     (api.get as jest.Mock).mockResolvedValue({ data: { data: mockPayments } });
     
-    render(<PaymentList />);
+    render(
+      <ToastProvider>
+        <PaymentList />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('Xác nhận')).toBeInTheDocument();
@@ -90,7 +119,11 @@ describe('PaymentList', () => {
     ];
     (api.get as jest.Mock).mockResolvedValue({ data: { data: mockPayments } });
     
-    render(<PaymentList />);
+    render(
+      <ToastProvider>
+        <PaymentList />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.queryByText('Xác nhận')).not.toBeInTheDocument();
@@ -111,7 +144,11 @@ describe('PaymentList', () => {
     (api.get as jest.Mock).mockResolvedValue({ data: { data: mockPayments } });
     (api.put as jest.Mock).mockResolvedValue({ data: { success: true } });
     
-    render(<PaymentList />);
+    render(
+      <ToastProvider>
+        <PaymentList />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('Xác nhận')).toBeInTheDocument();
@@ -138,9 +175,11 @@ describe('PaymentList', () => {
     (api.get as jest.Mock).mockResolvedValue({ data: { data: mockPayments } });
     (api.put as jest.Mock).mockRejectedValue({ response: { data: { message: 'Error' } } });
     
-    const alertSpy = jest.spyOn(window, 'alert').mockImplementation();
-    
-    render(<PaymentList />);
+    render(
+      <ToastProvider>
+        <PaymentList />
+      </ToastProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('Xác nhận')).toBeInTheDocument();
@@ -148,11 +187,10 @@ describe('PaymentList', () => {
     
     await userEvent.click(screen.getByText('Xác nhận'));
     
+    // Wait for API call to be made (error is handled via toast, not alert)
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalled();
-    });
-    
-    alertSpy.mockRestore();
+      expect(api.put).toHaveBeenCalledWith('/payments/1/confirm');
+    }, { timeout: 3000 });
   });
 });
 

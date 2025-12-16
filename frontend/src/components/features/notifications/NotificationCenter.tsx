@@ -21,13 +21,15 @@ export const NotificationCenter: React.FC = () => {
     if (token && user.id) {
       notificationService.connect(user.id, token);
 
-      notificationService.onNotification((notification) => {
+      const handleNotification = (notification: Notification) => {
         setNotifications((prev) => [notification, ...prev]);
         setUnreadCount((prev) => prev + 1);
-      });
+      };
+
+      notificationService.onNotification(handleNotification);
 
       return () => {
-        notificationService.offNotification(() => {});
+        notificationService.offNotification(handleNotification);
         notificationService.disconnect();
       };
     }

@@ -15,7 +15,7 @@ jest.mock('../../../config/api', () => ({
 const mockPatients = [
   {
     id: 1,
-    name: 'Nguyễn Văn A',
+    fullName: 'Nguyễn Văn A',
     phone: '0912345678',
     email: 'nguyenvana@example.com',
     date_of_birth: '1990-01-01',
@@ -23,7 +23,7 @@ const mockPatients = [
   },
   {
     id: 2,
-    name: 'Lê Thị B',
+    fullName: 'Lê Thị B',
     phone: '0987654321',
     email: 'lethib@example.com',
     date_of_birth: '1995-05-15',

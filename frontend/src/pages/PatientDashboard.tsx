@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { appointmentService } from '../services/appointment.service';
+import { appointmentService, Appointment } from '../services/appointment.service';
 import { format } from 'date-fns';
 import { Layout } from '../components/layout/Layout';
 
 export const PatientDashboard: React.FC = () => {
-  const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [stats, setStats] = useState({
     total: 0,
     upcoming: 0,
@@ -147,13 +147,13 @@ export const PatientDashboard: React.FC = () => {
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="font-medium text-gray-900">
-                      {(apt as any).doctor_name || 'Bác sĩ'}
+                      {apt.doctor_name || 'Bác sĩ'}
                     </p>
                     <p className="text-sm text-gray-500">
                       {format(new Date(apt.appointmentDate), 'dd/MM/yyyy HH:mm')}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {(apt as any).service_name || 'Dịch vụ'}
+                      {apt.service_name || 'Dịch vụ'}
                     </p>
                   </div>
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">

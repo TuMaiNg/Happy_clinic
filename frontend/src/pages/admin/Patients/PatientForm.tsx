@@ -5,11 +5,13 @@ import { Input } from '../../../components/common/Input';
 
 interface Patient {
   id?: number;
-  name: string;
+  fullName: string;
   phone: string;
   email?: string;
+  birthday?: string;
   date_of_birth?: string;
   address?: string;
+  name?: string; // For backward compatibility
 }
 
 interface PatientFormProps {
@@ -24,11 +26,15 @@ export const PatientForm: React.FC<PatientFormProps> = ({
   onSuccess,
 }) => {
   const [formData, setFormData] = useState<Patient>(
-    patient || {
-      name: '',
+    patient ? {
+      ...patient,
+      fullName: patient.fullName || '',
+      birthday: patient.birthday || patient.date_of_birth || '',
+    } : {
+      fullName: '',
       phone: '',
       email: '',
-      date_of_birth: '',
+      birthday: '',
       address: '',
     }
   );
@@ -38,10 +44,18 @@ export const PatientForm: React.FC<PatientFormProps> = ({
     e.preventDefault();
     try {
       setLoading(true);
+      const payload = {
+        fullName: formData.fullName,
+        phone: formData.phone,
+        email: formData.email || null,
+        birthday: formData.birthday || formData.date_of_birth || null,
+        address: formData.address || null,
+      };
+      
       if (patient?.id) {
-        await api.put(`/patients/${patient.id}`, formData);
+        await api.put(`/patients/${patient.id}`, payload);
       } else {
-        await api.post('/patients', formData);
+        await api.post('/patients', payload);
       }
       onSuccess();
     } catch (error: any) {
@@ -63,8 +77,8 @@ export const PatientForm: React.FC<PatientFormProps> = ({
           <label className="label">Tên *</label>
           <Input
             type="text"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            value={formData.fullName || ''}
+            onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
             required
           />
         </div>
@@ -96,9 +110,9 @@ export const PatientForm: React.FC<PatientFormProps> = ({
           <label className="label">Ngày sinh</label>
           <Input
             type="date"
-            value={formData.date_of_birth || ''}
+            value={formData.birthday || formData.date_of_birth || ''}
             onChange={(e) =>
-              setFormData({ ...formData, date_of_birth: e.target.value })
+              setFormData({ ...formData, birthday: e.target.value, date_of_birth: e.target.value })
             }
           />
         </div>
@@ -132,6 +146,7 @@ export const PatientForm: React.FC<PatientFormProps> = ({
     </Modal>
   );
 };
+
 
 
 

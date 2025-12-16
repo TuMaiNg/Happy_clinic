@@ -3,11 +3,12 @@ import { Modal } from '../../common/Modal';
 import { Button } from '../../common/Button';
 import { Input } from '../../common/Input';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { Appointment } from '../../../services/appointment.service';
 
 interface CancelAppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  appointment: any;
+  appointment: Appointment;
   onConfirm: (reason: string) => void;
   cancellationFee?: number;
 }
@@ -69,7 +70,7 @@ export const CancelAppointmentModal: React.FC<CancelAppointmentModalProps> = ({
         {/* Appointment Info */}
         <div className="bg-neutral-light rounded-lg p-4">
           <p className="text-sm text-neutral-medium mb-1">Bác sĩ</p>
-          <p className="font-medium">{(appointment as any)?.doctor_name || 'N/A'}</p>
+          <p className="font-medium">{appointment?.doctor_name || 'N/A'}</p>
           
           <p className="text-sm text-neutral-medium mb-1 mt-3">Ngày giờ</p>
           <p className="font-medium">
