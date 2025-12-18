@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { appointmentService } from '../services/appointment.service';
-import { format } from 'date-fns';
+
 import { Layout } from '../components/layout/Layout';
 import { AppointmentCard } from '../components/features/appointments/AppointmentCard';
 import { CancelAppointmentModal } from '../components/features/appointments/CancelAppointmentModal';
@@ -15,11 +15,7 @@ export const Appointments: React.FC = () => {
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
 
-  useEffect(() => {
-    loadAppointments();
-  }, [filter]);
-
-  const loadAppointments = async () => {
+  const loadAppointments = useCallback(async () => {
     try {
       setLoading(true);
       const response = await appointmentService.getAll({
@@ -31,7 +27,11 @@ export const Appointments: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    loadAppointments();
+  }, [loadAppointments]);
 
   const handleCancelClick = (appointment: any) => {
     setSelectedAppointment(appointment);

@@ -18,6 +18,28 @@ export interface CreatePaymentRequest {
   notes?: string;
 }
 
+export interface CreatePayOSLinkResponse {
+  success: boolean;
+  data: {
+    payUrl: string;
+    orderCode: string;
+    gatewayResponse?: any;
+  };
+}
+
+export interface PayOSStatusResponse {
+  success: boolean;
+  data: {
+    orderCode: string;
+    status: string;
+    amount: number;
+    paymentMethod: string;
+    gateway: string | null;
+    transactionId: string | null;
+    paidAt: string | null;
+  };
+}
+
 export const paymentService = {
   async create(data: CreatePaymentRequest): Promise<{ success: boolean; data: Payment }> {
     const response = await api.post('/payments', data);
@@ -40,6 +62,16 @@ export const paymentService = {
 
   async confirm(id: number, transactionId?: string): Promise<{ success: boolean; data: Payment }> {
     const response = await api.put(`/payments/${id}/confirm`, { transactionId });
+    return response.data;
+  },
+
+  async createPayOSLink(appointmentId: number, amount?: number, description?: string): Promise<CreatePayOSLinkResponse> {
+    const response = await api.post('/payments/payos/create', { appointmentId, amount, description });
+    return response.data;
+  },
+
+  async getPayOSStatus(orderCode: string): Promise<PayOSStatusResponse> {
+    const response = await api.get('/payments/payos/status', { params: { orderCode } });
     return response.data;
   },
 };

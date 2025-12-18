@@ -4,14 +4,15 @@ import { doctorService } from '../../../services/doctor.service';
 import { serviceService } from '../../../services/service.service';
 import { timeslotService } from '../../../services/timeslot.service';
 import { appointmentService } from '../../../services/appointment.service';
+import { paymentService } from '../../../services/payment.service';
 import { format, addDays } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { Button } from '../../common/Button';
 import { Card } from '../../common/Card';
-import { Input } from '../../common/Input';
+
 import { Modal } from '../../common/Modal';
 import { CheckCircleIcon, UserIcon, CalendarIcon, ClockIcon } from '@heroicons/react/24/outline';
-import { Skeleton, SkeletonDoctorCard, SkeletonTimeSlot } from '../../common/Skeleton';
+import { SkeletonDoctorCard, SkeletonTimeSlot } from '../../common/Skeleton';
 import { useDebounce } from '../../../hooks/useDebounce';
 
 interface BookingWizardProps {
@@ -39,13 +40,16 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
   const [visitType, setVisitType] = useState<'first-visit' | 'follow-up'>('first-visit');
   const [loading, setLoading] = useState(false);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
-  const [loadingServices, setLoadingServices] = useState(true);
+
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [error, setError] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [creatingPayLink, setCreatingPayLink] = useState(false);
+
   const [appointmentId, setAppointmentId] = useState<number | null>(null);
   const [specialtyFilter, setSpecialtyFilter] = useState<string>('');
-  
+
   // Debounce specialty filter to avoid too many API calls
   const debouncedSpecialtyFilter = useDebounce(specialtyFilter, 300);
 
@@ -65,13 +69,13 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
 
   const loadServices = useCallback(async () => {
     try {
-      setLoadingServices(true);
+
       const response = await serviceService.getAll({ isActive: true });
       setServices(response.data);
     } catch (err: any) {
       setError('Không thể tải danh sách dịch vụ');
     } finally {
-      setLoadingServices(false);
+
     }
   }, []);
 
@@ -158,8 +162,8 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
       });
 
       setAppointmentId(response.data.id);
-      setShowSuccessModal(true);
-      
+      setShowPaymentDialog(true);
+
       if (onComplete) {
         onComplete();
       }
@@ -167,7 +171,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
       console.error('Error creating appointment:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Đặt lịch hẹn thất bại. Vui lòng thử lại.';
       setError(errorMessage);
-      
+
       // If slot is full, reload available slots
       if (errorMessage.includes('hết chỗ') || errorMessage.includes('đã hết')) {
         await loadAvailableSlots();
@@ -427,7 +431,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                   <label className="block text-lg font-semibold text-neutral-dark mb-3">
                     Chọn giờ
                   </label>
-                  
+
                   {!selectedDate ? (
                     <div className="bg-neutral-light rounded-xl p-12 text-center border-2 border-dashed border-neutral-border">
                       <ClockIcon className="w-16 h-16 text-neutral-medium mx-auto mb-4 opacity-50" />
@@ -507,7 +511,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                           })}
                         </div>
                       )}
-                      
+
                       {selectedSlot && (
                         <div className="mt-4 p-4 bg-primary-50 border-l-4 border-primary-500 rounded-lg">
                           <p className="text-sm text-neutral-dark">
@@ -647,6 +651,56 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                 Tiếp theo →
               </Button>
             )}
+	      <Modal
+	        isOpen={showPaymentDialog}
+	        onClose={() => setShowPaymentDialog(false)}
+	        title="Chọn hình thức thanh toán"
+	        size="md"
+	      >
+	        <div className="space-y-4">
+	          <p className="text-neutral-medium">
+	            Số tiền dự kiến: <span className="font-semibold">{selectedService?.price?.toLocaleString('vi-VN')}₫</span>
+	          </p>
+	          <div className="grid grid-cols-1 gap-3">
+	            <Button
+	              variant="primary"
+	              onClick={async () => {
+	                if (!appointmentId || !selectedService?.price) return;
+	                try {
+	                  setCreatingPayLink(true);
+	                  const res = await paymentService.createPayOSLink(
+	                    appointmentId,
+	                    selectedService.price,
+	                    `Thanh toán lịch hẹn #${appointmentId}`
+	                  );
+	                  try { sessionStorage.setItem('payos_order_code', res.data.orderCode); } catch {}
+	                  window.location.href = res.data.payUrl;
+	                } catch (err: any) {
+	                  setError(err?.response?.data?.message || err?.message || 'Không thể tạo link thanh toán. Vui lòng thử lại.');
+	                  setShowPaymentDialog(false);
+	                } finally {
+	                  setCreatingPayLink(false);
+	                }
+	              }}
+	              isLoading={creatingPayLink}
+	            >
+	              Thanh toán ngay (PayOS)
+	            </Button>
+
+	            <Button
+	              variant="outline"
+	              onClick={() => {
+	                setShowPaymentDialog(false);
+	                setShowSuccessModal(true);
+	              }}
+	            >
+	              Thanh toán sau khi điều trị
+	            </Button>
+	          </div>
+	        </div>
+	      </Modal>
+
+            )
           </div>
         </div>
       </div>

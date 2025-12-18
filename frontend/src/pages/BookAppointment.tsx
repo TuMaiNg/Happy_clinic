@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doctorService } from '../services/doctor.service';
 import { serviceService } from '../services/service.service';
 import { timeslotService } from '../services/timeslot.service';
 import { appointmentService } from '../services/appointment.service';
+import { paymentService } from '../services/payment.service';
+import { Dialog, Transition } from '@headlessui/react';
 import { format } from 'date-fns';
 
 export const BookAppointment: React.FC = () => {
@@ -19,6 +21,10 @@ export const BookAppointment: React.FC = () => {
   const [visitType, setVisitType] = useState<'first-visit' | 'follow-up'>('first-visit');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [createdAppointment, setCreatedAppointment] = useState<{ id: number; amount: number } | null>(null);
+  const [creatingPayLink, setCreatingPayLink] = useState(false);
+
 
   useEffect(() => {
     loadDoctors();
@@ -82,7 +88,7 @@ export const BookAppointment: React.FC = () => {
       const [hours, minutes] = availableSlots.find(s => s.id === selectedSlot)?.startTime.split(':') || ['09', '00'];
       const appointmentDateTime = `${selectedDate}T${hours}:${minutes}:00`;
 
-      await appointmentService.create({
+      const createRes = await appointmentService.create({
         doctorId: selectedDoctor,
         serviceId: selectedService,
         slotId: selectedSlot,
@@ -91,7 +97,13 @@ export const BookAppointment: React.FC = () => {
         symptoms: symptoms || undefined,
       });
 
-      navigate('/appointments', { state: { message: 'Đặt lịch hẹn thành công!' } });
+      // Lấy giá dịch vụ từ danh sách services hiện có
+      const chosenService = services.find((s) => s.id === selectedService);
+      const amount = chosenService?.price || 0;
+
+      setCreatedAppointment({ id: createRes.data.id, amount });
+      setPaymentDialogOpen(true);
+      return;
     } catch (err: any) {
       setError(err.response?.data?.message || 'Đặt lịch hẹn thất bại. Vui lòng thử lại.');
     } finally {
@@ -252,6 +264,100 @@ export const BookAppointment: React.FC = () => {
               </button>
             </div>
           </form>
+
+          {/* Payment Choice Dialog */}
+          <Transition appear show={paymentDialogOpen} as={Fragment}>
+            <Dialog as="div" className="relative z-50" onClose={() => setPaymentDialogOpen(false)}>
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0"
+                enterTo="opacity-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100"
+                leaveTo="opacity-0"
+              >
+                <div className="fixed inset-0 bg-black/25" />
+              </Transition.Child>
+
+              <div className="fixed inset-0 overflow-y-auto">
+                <div className="flex min-h-full items-center justify-center p-4 text-center">
+                  <Transition.Child
+                    as={Fragment}
+                    enter="ease-out duration-300"
+                    enterFrom="opacity-0 scale-95"
+                    enterTo="opacity-100 scale-100"
+                    leave="ease-in duration-200"
+                    leaveFrom="opacity-100 scale-100"
+                    leaveTo="opacity-0 scale-95"
+                  >
+                    <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+                      <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
+                        Chọn hình thức thanh toán
+                      </Dialog.Title>
+                      <div className="mt-2 text-sm text-gray-600">
+                        {createdAppointment && (
+                          <p>
+                            Số tiền dự kiến: <span className="font-semibold">{createdAppointment.amount.toLocaleString('vi-VN')} VNĐ</span>
+                          </p>
+                        )}
+                        <p className="mt-1">Bạn có thể thanh toán ngay hoặc thanh toán sau khi điều trị.</p>
+                      </div>
+
+                      <div className="mt-6 flex flex-col gap-3">
+                        <button
+                          type="button"
+                          disabled={creatingPayLink}
+                          onClick={async () => {
+                            if (!createdAppointment) return;
+                            try {
+                              setCreatingPayLink(true);
+                              const res = await paymentService.createPayOSLink(
+                                createdAppointment.id,
+                                createdAppointment.amount,
+                                `Thanh toán lịch hẹn #${createdAppointment.id}`
+                              );
+                              // Lưu orderCode để trang success/cancel có thể dùng nếu gateway không trả orderCode trên URL
+                              try { sessionStorage.setItem('payos_order_code', res.data.orderCode); } catch {}
+                              // Redirect to PayOS checkout
+                              window.location.href = res.data.payUrl;
+                            } catch (err: any) {
+                              setError(err.response?.data?.message || 'Không thể tạo link thanh toán. Vui lòng thử lại.');
+                              setPaymentDialogOpen(false);
+                            } finally {
+                              setCreatingPayLink(false);
+                            }
+                          }}
+                          className="w-full inline-flex justify-center rounded-md bg-primary-600 px-4 py-2 text-white hover:bg-primary-700 disabled:opacity-50"
+                        >
+                          {creatingPayLink ? 'Đang tạo link thanh toán...' : 'Thanh toán ngay'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentDialogOpen(false);
+                            navigate('/appointments', { state: { message: 'Đặt lịch thành công. Bạn có thể thanh toán sau khi điều trị.' } });
+                          }}
+                          className="w-full inline-flex justify-center rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
+                        >
+                          Thanh toán sau khi điều trị
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setPaymentDialogOpen(false)}
+                          className="w-full inline-flex justify-center rounded-md px-4 py-2 text-gray-500 hover:text-gray-700"
+                        >
+                          Đóng
+                        </button>
+                      </div>
+                    </Dialog.Panel>
+                  </Transition.Child>
+                </div>
+              </div>
+            </Dialog>
+          </Transition>
         </div>
       </div>
     </div>

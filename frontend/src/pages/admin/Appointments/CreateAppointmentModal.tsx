@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal } from '../../../components/common/Modal';
 import { doctorService } from '../../../services/doctor.service';
 import { serviceService } from '../../../services/service.service';
 import { timeslotService } from '../../../services/timeslot.service';
-import { appointmentService } from '../../../services/appointment.service';
+
 import { api } from '../../../config/api';
 import { useToast } from '../../../contexts/ToastContext';
 
@@ -39,17 +39,7 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
   const [searchingPatient, setSearchingPatient] = useState(false);
   const { success, error } = useToast();
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    if (formData.doctorId && formData.date) {
-      loadAvailableSlots();
-    }
-  }, [formData.doctorId, formData.date]);
-
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       setLoading(true);
       const [doctorsRes, servicesRes] = await Promise.all([
@@ -63,11 +53,11 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [error]);
 
-  const loadAvailableSlots = async () => {
+  const loadAvailableSlots = useCallback(async () => {
     if (!formData.doctorId || !formData.date) return;
-    
+
     try {
       const response = await timeslotService.getAvailable({
         doctorId: parseInt(formData.doctorId),
@@ -78,7 +68,17 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
     } catch (err: any) {
       error('Không thể tải khung giờ trống');
     }
-  };
+  }, [formData.doctorId, formData.date, formData.serviceId, error]);
+
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  useEffect(() => {
+    if (formData.doctorId && formData.date) {
+      loadAvailableSlots();
+    }
+  }, [formData.doctorId, formData.date, loadAvailableSlots]);
 
   const searchPatient = async () => {
     if (!searchPhone.trim()) return;
@@ -105,23 +105,7 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
     setSearchPhone('');
   };
 
-  const handleCreatePatient = async () => {
-    if (!formData.patientName || !formData.patientPhone) {
-      error('Vui lòng nhập tên và số điện thoại');
-      return;
-    }
-
-    try {
-      const response = await api.post('/patients', {
-        fullName: formData.patientName,
-        phone: formData.patientPhone,
-      });
-      handleSelectPatient(response.data.data);
-      success('Đã tạo bệnh nhân mới');
-    } catch (err: any) {
-      error(err.response?.data?.message || 'Không thể tạo bệnh nhân');
-    }
-  };
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

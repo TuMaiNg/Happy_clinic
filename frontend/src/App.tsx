@@ -12,6 +12,8 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m
 const PatientDashboard = lazy(() => import('./pages/PatientDashboard').then(m => ({ default: m.PatientDashboard })));
 const BookingWizard = lazy(() => import('./components/features/appointments/BookingWizard').then(m => ({ default: m.BookingWizard })));
 const Appointments = lazy(() => import('./pages/Appointments').then(m => ({ default: m.Appointments })));
+const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess').then(m => ({ default: m.PaymentSuccess })));
+const PaymentCancel = lazy(() => import('./pages/PaymentCancel').then(m => ({ default: m.PaymentCancel })));
 const AdminLayout = lazy(() => import('./pages/admin/Layout/AdminLayout').then(m => ({ default: m.AdminLayout })));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 const AppointmentList = lazy(() => import('./pages/admin/Appointments/AppointmentList').then(m => ({ default: m.AppointmentList })));
@@ -123,6 +125,8 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccess /></ProtectedRoute>} />
+              <Route path="/payment/cancel" element={<ProtectedRoute><PaymentCancel /></ProtectedRoute>} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Suspense>
