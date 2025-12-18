@@ -10,6 +10,9 @@ export interface Payment {
   paymentMethod: PaymentMethod;
   status: PaymentStatus;
   transactionId?: string;
+  orderCode?: string | null;
+  gateway?: string | null;
+  meta?: any | null;
   paidAt?: Date;
   notes?: string;
   createdAt?: Date;
@@ -19,19 +22,45 @@ export interface Payment {
 export class PaymentModel {
   static async create(payment: Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>): Promise<Payment> {
     const [result] = await pool.query(
-      `INSERT INTO payments (appointment_id, amount, payment_method, status, transaction_id, notes) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO payments (appointment_id, amount, payment_method, status, transaction_id)
+       VALUES (?, ?, ?, ?, ?)`,
       [
         payment.appointmentId,
         payment.amount,
         payment.paymentMethod,
         payment.status || 'pending',
         payment.transactionId || null,
-        payment.notes || null,
       ]
     ) as any;
 
-    return this.findById(result.insertId) as Promise<Payment>;
+    const created = await this.findById(result.insertId) as Payment;
+
+    // Best-effort: set gateway fields if provided (works after migration adds columns)
+    if ((payment as any).orderCode || (payment as any).gateway || (payment as any).meta) {
+      try {
+        await this.setGatewayFields(result.insertId, {
+          orderCode: (payment as any).orderCode || null,
+          gateway: (payment as any).gateway || null,
+          meta: (payment as any).meta || null,
+        });
+        return await this.findById(result.insertId) as Payment;
+      } catch (_) {
+        // ignore if columns don't exist yet
+      }
+    }
+
+    return created;
+  }
+
+  static async setGatewayFields(id: number, fields: { orderCode?: string | null; gateway?: string | null; meta?: any | null; }): Promise<void> {
+    const updates: string[] = [];
+    const values: any[] = [];
+    if (fields.orderCode !== undefined) { updates.push('order_code = ?'); values.push(fields.orderCode); }
+    if (fields.gateway !== undefined) { updates.push('gateway = ?'); values.push(fields.gateway); }
+    if (fields.meta !== undefined) { updates.push('meta = ?'); values.push(JSON.stringify(fields.meta)); }
+    if (!updates.length) return;
+    values.push(id);
+    await pool.query(`UPDATE payments SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`, values);
   }
 
   static async findById(id: number): Promise<Payment | null> {
@@ -53,6 +82,22 @@ export class PaymentModel {
     ) as any[];
 
     return rows.map((row: any) => this.mapRowToPayment(row));
+  }
+
+  static async findByTransactionId(transactionId: string): Promise<Payment | null> {
+    const [rows] = await pool.query(
+      'SELECT * FROM payments WHERE transaction_id = ? ORDER BY created_at DESC LIMIT 1',
+      [transactionId]
+    ) as any[];
+    return rows.length > 0 ? this.mapRowToPayment(rows[0]) : null;
+  }
+
+  static async findByOrderCode(orderCode: string): Promise<Payment | null> {
+    const [rows] = await pool.query(
+      'SELECT * FROM payments WHERE order_code = ? ORDER BY created_at DESC LIMIT 1',
+      [orderCode]
+    ) as any[];
+    return rows.length > 0 ? this.mapRowToPayment(rows[0]) : null;
   }
 
   static async findAll(filters?: {
@@ -126,16 +171,48 @@ export class PaymentModel {
       fields.push('notes = ?');
       values.push(updates.notes || null);
     }
+    if ((updates as any).orderCode !== undefined) {
+      fields.push('order_code = ?');
+      values.push((updates as any).orderCode);
+    }
+    if ((updates as any).gateway !== undefined) {
+      fields.push('gateway = ?');
+      values.push((updates as any).gateway);
+    }
+    if ((updates as any).meta !== undefined) {
+      fields.push('meta = ?');
+      values.push(JSON.stringify((updates as any).meta));
+    }
 
     if (fields.length === 0) return this.findById(id);
 
     fields.push('updated_at = NOW()');
     values.push(id);
 
-    await pool.query(
-      `UPDATE payments SET ${fields.join(', ')} WHERE id = ?`,
-      values
-    );
+    try {
+      await pool.query(
+        `UPDATE payments SET ${fields.join(', ')} WHERE id = ?`,
+        values
+      );
+    } catch (err: any) {
+      // Fallback for environments where optional columns (notes, order_code, gateway, meta) are missing
+      if (err?.code === 'ER_BAD_FIELD_ERROR') {
+        const allowedFields: string[] = [];
+        const allowedValues: any[] = [];
+        if (updates.status !== undefined) { allowedFields.push('status = ?'); allowedValues.push(updates.status); }
+        if (updates.paidAt !== undefined) { allowedFields.push('paid_at = ?'); allowedValues.push(updates.paidAt || null); }
+        if (updates.transactionId !== undefined) { allowedFields.push('transaction_id = ?'); allowedValues.push(updates.transactionId || null); }
+        if (allowedFields.length) {
+          allowedFields.push('updated_at = NOW()');
+          allowedValues.push(id);
+          await pool.query(`UPDATE payments SET ${allowedFields.join(', ')} WHERE id = ?`, allowedValues);
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
 
     return this.findById(id);
   }
@@ -148,6 +225,9 @@ export class PaymentModel {
       paymentMethod: row.payment_method,
       status: row.status,
       transactionId: row.transaction_id,
+      orderCode: row.order_code ?? null,
+      gateway: row.gateway ?? null,
+      meta: row.meta ? JSON.parse(row.meta) : null,
       paidAt: row.paid_at,
       notes: row.notes,
       createdAt: row.created_at,
@@ -155,4 +235,3 @@ export class PaymentModel {
     };
   }
 }
-

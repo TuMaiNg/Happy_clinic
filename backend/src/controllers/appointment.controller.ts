@@ -299,6 +299,7 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
       title: 'Lịch hẹn mới cần xác nhận',
       message: `Bệnh nhân ${patient.full_name} đặt lịch khám với ${doctor.full_name}`,
       appointmentId: appointment.id,
+      patientId: patientId, // Add patientId here
       priority: 'high',
     });
   } catch (error: any) {

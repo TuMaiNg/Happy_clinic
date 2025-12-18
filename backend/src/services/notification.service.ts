@@ -198,6 +198,7 @@ class NotificationService {
     title: string;
     message: string;
     appointmentId: number;
+    patientId: number; // Add patientId
     priority?: string;
   }) {
     // Get all staff and admin users
@@ -219,17 +220,17 @@ class NotificationService {
     for (const user of staffUsers) {
       await pool.query(
         `INSERT INTO notifications 
-         (appointment_id, type, title, message, recipient, recipient_type, status, priority) 
+         (appointment_id, patient_id, type, title, message, recipient, recipient_type, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           notification.appointmentId,
+          notification.patientId,
           notification.type,
           notification.title,
           notification.message,
           user.id,
           'user',
           'sent',
-          notification.priority || 'normal',
         ]
       );
     }

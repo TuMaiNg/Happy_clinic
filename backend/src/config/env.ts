@@ -5,7 +5,7 @@ dotenv.config();
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || process.env.BACKEND_PORT || '3000'),
-  
+
   database: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '3306'),
@@ -13,14 +13,14 @@ export const config = {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
   },
-  
+
   jwt: {
     secret: process.env.JWT_SECRET || (() => { throw new Error('JWT_SECRET must be set in environment variables'); })(),
     refreshSecret: process.env.JWT_REFRESH_SECRET || (() => { throw new Error('JWT_REFRESH_SECRET must be set in environment variables'); })(),
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
-  
+
   email: {
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.EMAIL_PORT || '587'),
@@ -31,13 +31,13 @@ export const config = {
     useOAuth2: process.env.EMAIL_USE_OAUTH2 === 'true',
     oauth2CredentialsPath: process.env.GOOGLE_OAUTH2_CREDENTIALS_PATH || 'credentials/google-oauth.json',
   },
-  
+
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/google/callback',
   },
-  
+
   sms: {
     enabled: process.env.SMS_ENABLED === 'true',
     provider: process.env.SMS_PROVIDER || 'mock', // twilio | viettel | vnpt | mock
@@ -50,11 +50,21 @@ export const config = {
     viettelBrandname: process.env.VIETTEL_BRANDNAME || '',
     viettelEndpoint: process.env.VIETTEL_ENDPOINT || '',
   },
-  
+
   frontend: {
     url: process.env.FRONTEND_URL || 'http://localhost:3001',
   },
-  
+
+  payos: {
+    clientId: process.env.PAYOS_CLIENT_ID || '',
+    apiKey: process.env.PAYOS_API_KEY || '',
+    checksumKey: process.env.PAYOS_CHECKSUM_KEY || '',
+    returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment/success`,
+    cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment/cancel`,
+    webhookUrl: process.env.PAYOS_WEBHOOK_URL || `${process.env.BACKEND_PUBLIC_URL || 'http://localhost:5000'}/api/payments/payos/webhook`,
+    baseUrl: process.env.PAYOS_BASE_URL || 'https://api.payos.vn',
+  },
+
   businessRules: {
     minLeadTimeHours: parseInt(process.env.MIN_LEAD_TIME_HOURS || '2'),
     cancellationFeePercent: parseInt(process.env.CANCELLATION_FEE_PERCENT || '20'),

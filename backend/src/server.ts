@@ -23,6 +23,7 @@ import auditRoutes from './routes/audit.routes';
 import insuranceRoutes from './routes/insurance.routes';
 import otpRoutes from './routes/otp.routes';
 import authGoogleRoutes from './routes/auth-google.routes';
+import payosRoutes from './routes/payos.routes';
 import { setupSocketIO } from './services/socket.service';
 import './jobs/reminder.job';
 import './jobs/schedule-generator.job';
@@ -56,7 +57,7 @@ app.use(cors({
         config.frontend.url,
         // Add production domains here
       ];
-      
+
       if (!origin || allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
@@ -73,6 +74,9 @@ app.use(cors({
   exposedHeaders: ['X-Total-Count'],
   maxAge: 86400, // 24 hours
 }));
+
+// NOTE: Webhook must be able to read raw body BEFORE express.json consumes it
+app.use('/api/payments/payos/webhook', express.raw({ type: '*/*' }));
 
 // Other Middleware
 app.use(compression());
@@ -109,6 +113,7 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/time-slots', timeslotRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/payments/payos', payosRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/config', configRoutes);
