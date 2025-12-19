@@ -1,4 +1,5 @@
 import pool from '../config/database';
+import { format } from 'date-fns';
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'checked-in' | 'completed' | 'cancelled' | 'no-show';
 export type VisitType = 'first-visit' | 'follow-up';
@@ -27,6 +28,15 @@ export interface Appointment {
   notes?: string;
   createdAt?: Date;
   updatedAt?: Date;
+  // Additional fields from JOIN queries (optional for backward compatibility)
+  patient_name?: string;
+  patient_phone?: string;
+  doctor_name?: string;
+  doctor_speciality?: string;
+  service_name?: string;
+  service_price?: number;
+  slot_start_time?: string;
+  slot_end_time?: string;
 }
 
 export class AppointmentModel {
@@ -65,10 +75,10 @@ export class AppointmentModel {
               s.name as service_name, s.price as service_price,
               ts.start_time as slot_start_time, ts.end_time as slot_end_time
        FROM appointments a
-       JOIN patients p ON a.patient_id = p.id
-       JOIN doctors d ON a.doctor_id = d.id
-       JOIN services s ON a.service_id = s.id
-       JOIN time_slots ts ON a.slot_id = ts.id
+       LEFT JOIN patients p ON a.patient_id = p.id
+       LEFT JOIN doctors d ON a.doctor_id = d.id
+       LEFT JOIN services s ON a.service_id = s.id
+       LEFT JOIN time_slots ts ON a.slot_id = ts.id
        WHERE a.id = ?`,
       [id]
     ) as any[];
@@ -91,10 +101,10 @@ export class AppointmentModel {
                         s.name as service_name, s.price as service_price,
                         ts.start_time as slot_start_time, ts.end_time as slot_end_time
                  FROM appointments a
-                 JOIN patients p ON a.patient_id = p.id
-                 JOIN doctors d ON a.doctor_id = d.id
-                 JOIN services s ON a.service_id = s.id
-                 JOIN time_slots ts ON a.slot_id = ts.id
+                 LEFT JOIN patients p ON a.patient_id = p.id
+                 LEFT JOIN doctors d ON a.doctor_id = d.id
+                 LEFT JOIN services s ON a.service_id = s.id
+                 LEFT JOIN time_slots ts ON a.slot_id = ts.id
                  WHERE 1=1`;
     const values: any[] = [];
 
@@ -114,13 +124,19 @@ export class AppointmentModel {
     }
 
     if (filters?.fromDate) {
-      query += ' AND DATE(a.appointment_date) >= ?';
-      values.push(filters.fromDate);
+      query += ' AND DATE(a.appointment_date) >= DATE(?)';
+      const fromDateStr = filters.fromDate instanceof Date 
+        ? format(filters.fromDate, 'yyyy-MM-dd')
+        : String(filters.fromDate);
+      values.push(fromDateStr);
     }
 
     if (filters?.toDate) {
-      query += ' AND DATE(a.appointment_date) <= ?';
-      values.push(filters.toDate);
+      query += ' AND DATE(a.appointment_date) <= DATE(?)';
+      const toDateStr = filters.toDate instanceof Date 
+        ? format(filters.toDate, 'yyyy-MM-dd')
+        : String(filters.toDate);
+      values.push(toDateStr);
     }
 
     query += ' ORDER BY a.appointment_date DESC, a.start_time ASC';
@@ -209,8 +225,8 @@ export class AppointmentModel {
       slotId: row.slot_id,
       scheduleId: row.schedule_id,
       appointmentDate: row.appointment_date,
-      startTime: row.start_time,
-      endTime: row.end_time,
+      startTime: row.start_time || row.slot_start_time, // Fallback to slot_start_time if start_time is null
+      endTime: row.end_time || row.slot_end_time, // Fallback to slot_end_time if end_time is null
       visitType: (row.visit_type === 'first_visit' ? 'first-visit' : row.visit_type === 'follow_up' ? 'follow-up' : row.visit_type) as VisitType,
       symptoms: row.symptoms,
       status: row.status,
@@ -225,6 +241,15 @@ export class AppointmentModel {
       notes: row.notes,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      // Include additional fields from JOIN queries
+      patient_name: row.patient_name,
+      patient_phone: row.patient_phone,
+      doctor_name: row.doctor_name,
+      doctor_speciality: row.doctor_speciality,
+      service_name: row.service_name,
+      service_price: row.service_price,
+      slot_start_time: row.slot_start_time,
+      slot_end_time: row.slot_end_time,
     };
   }
 }

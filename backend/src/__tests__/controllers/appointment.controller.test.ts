@@ -9,7 +9,17 @@ import { AppError } from '../../middleware/errorHandler';
 
 // Mock all dependencies
 jest.mock('../../config/database', () => ({
-  query: jest.fn(),
+  __esModule: true,
+  default: {
+    query: jest.fn(),
+    getConnection: jest.fn().mockResolvedValue({
+      beginTransaction: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+      query: jest.fn().mockResolvedValue([[]]),
+    }),
+  },
 }));
 
 jest.mock('../../models/Appointment', () => ({
@@ -170,6 +180,20 @@ describe('Appointment Controller', () => {
         status: 'pending',
       };
 
+      const mockConnection = {
+        beginTransaction: jest.fn().mockResolvedValue(undefined),
+        commit: jest.fn().mockResolvedValue(undefined),
+        rollback: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
+        query: jest.fn()
+          .mockResolvedValueOnce([[{ id: 1, is_available: 1, patient_count: 0, capacity: 1, schedule_id: 1, start_time: '09:00', end_time: '09:30' }]]) // FOR UPDATE query
+          .mockResolvedValueOnce([[]]) // expired appointments
+          .mockResolvedValueOnce([[{ id: 1, is_available: 1, patient_count: 0, capacity: 1 }]]) // re-check slot
+          .mockResolvedValueOnce([{ insertId: 1 }]) // INSERT appointment
+          .mockResolvedValueOnce([[]]) // UPDATE time_slots
+          .mockResolvedValueOnce([[{ user_id: 1, email: 'test@example.com' }]]), // patient info
+      };
+
       (PatientModel.findByUserId as jest.Mock).mockResolvedValue({ id: 1, fullName: 'Test' });
       (TimeSlotModel.findById as jest.Mock).mockResolvedValue({
         id: 1,
@@ -182,9 +206,12 @@ describe('Appointment Controller', () => {
       });
       (ServiceModel.findById as jest.Mock).mockResolvedValue({ id: 1, isActive: true });
       (AppointmentModel.findAll as jest.Mock).mockResolvedValue([]);
-      (AppointmentModel.create as jest.Mock).mockResolvedValue(mockAppointment);
-      (TimeSlotModel.incrementPatientCount as jest.Mock).mockResolvedValue(null);
-      (pool.query as jest.Mock).mockResolvedValue([[{ user_id: 1, email: 'test@example.com' }]]);
+      (AppointmentModel.findById as jest.Mock).mockResolvedValue(mockAppointment);
+      (pool.getConnection as jest.Mock).mockResolvedValue(mockConnection);
+      // Mock pool.query for queries after transaction
+      (pool.query as jest.Mock).mockResolvedValue([
+        [{ id: 1, full_name: 'Test Patient', email: 'test@example.com', user_id: 1 }],
+      ]);
 
       await appointmentController.createAppointment(mockReq as AuthRequest, mockRes as Response);
 

@@ -116,6 +116,11 @@ export const appointmentService = {
     return response.data;
   },
 
+  async reschedule(id: number, slotId: number, appointmentDate: string, reason?: string): Promise<{ success: boolean; data: Appointment }> {
+    const response = await api.put(`/appointments/${id}/reschedule`, { slotId, appointmentDate, reason });
+    return response.data;
+  },
+
   async checkIn(id: number): Promise<{ success: boolean; data: Appointment }> {
     const response = await api.put(`/appointments/${id}/check-in`);
     return response.data;

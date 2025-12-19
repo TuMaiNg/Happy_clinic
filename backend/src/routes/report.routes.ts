@@ -9,5 +9,6 @@ router.get('/appointments', authenticate, authorize('staff', 'admin'), asyncHand
 router.get('/revenue', authenticate, authorize('staff', 'admin'), asyncHandler(reportController.getRevenueStats));
 router.get('/doctors-performance', authenticate, authorize('staff', 'admin'), asyncHandler(reportController.getDoctorPerformance));
 router.get('/no-shows', authenticate, authorize('staff', 'admin'), asyncHandler(reportController.getNoShowStats));
+router.get('/daily', authenticate, authorize('staff', 'admin'), asyncHandler(reportController.getDailyReport));
 
 export default router;

@@ -3,6 +3,13 @@ import { Link } from 'react-router-dom';
 import { appointmentService, Appointment } from '../services/appointment.service';
 import { format } from 'date-fns';
 import { Layout } from '../components/layout/Layout';
+import { StatsCard } from '../components/common/StatsCard';
+import {
+  CalendarIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  HeartIcon,
+} from '@heroicons/react/24/outline';
 
 export const PatientDashboard: React.FC = () => {
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
@@ -47,123 +54,152 @@ export const PatientDashboard: React.FC = () => {
 
   return (
     <Layout>
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Dashboard - Bệnh nhân</h1>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0 bg-blue-500 rounded-md p-3">
-              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Tổng lịch hẹn</p>
-              <p className="text-2xl font-semibold text-gray-900">{stats.total}</p>
-            </div>
-          </div>
+      <div className="fade-in">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-neutral-dark mb-2">Dashboard - Bệnh nhân</h1>
+          <p className="text-sm text-neutral-medium">Chào mừng trở lại! Đây là tổng quan lịch hẹn của bạn</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0 bg-green-500 rounded-md p-3">
-              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Sắp tới</p>
-              <p className="text-2xl font-semibold text-gray-900">{stats.upcoming}</p>
-            </div>
-          </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <StatsCard
+            title="Tổng lịch hẹn"
+            value={stats.total}
+            icon={<CalendarIcon className="w-6 h-6" />}
+            color="primary"
+          />
+          <StatsCard
+            title="Sắp tới"
+            value={stats.upcoming}
+            icon={<ClockIcon className="w-6 h-6" />}
+            color="info"
+          />
+          <StatsCard
+            title="Đã hoàn thành"
+            value={stats.completed}
+            icon={<CheckCircleIcon className="w-6 h-6" />}
+            color="success"
+          />
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0 bg-purple-500 rounded-md p-3">
-              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Đã hoàn thành</p>
-              <p className="text-2xl font-semibold text-gray-900">{stats.completed}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Thao tác nhanh</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Link
-            to="/book-appointment"
-            className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-          >
-            <div className="flex-shrink-0 bg-primary-100 rounded-md p-3">
-              <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-900">Đặt lịch hẹn mới</p>
-              <p className="text-sm text-gray-500">Đặt lịch hẹn với bác sĩ</p>
-            </div>
-          </Link>
-
-          <Link
-            to="/appointments"
-            className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-          >
-            <div className="flex-shrink-0 bg-green-100 rounded-md p-3">
-              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-900">Xem lịch hẹn</p>
-              <p className="text-sm text-gray-500">Quản lý lịch hẹn của bạn</p>
-            </div>
-          </Link>
-        </div>
-      </div>
-
-      {/* Upcoming Appointments */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Lịch hẹn sắp tới</h2>
-          <Link to="/appointments" className="text-primary-600 hover:text-primary-700 text-sm">
-            Xem tất cả
-          </Link>
-        </div>
-        {upcomingAppointments.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">Không có lịch hẹn sắp tới</p>
-        ) : (
-          <div className="space-y-4">
-            {upcomingAppointments.map((apt) => (
-              <div key={apt.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {apt.doctor_name || 'Bác sĩ'}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {format(new Date(apt.appointmentDate), 'dd/MM/yyyy')} lúc {format(new Date(apt.appointmentDate), 'HH:mm')}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {apt.service_name || 'Dịch vụ'}
-                    </p>
-                  </div>
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                    Đã xác nhận
-                  </span>
-                </div>
+        {/* Quick Actions */}
+        <div className="card mb-8">
+          <h2 className="card-title mb-4">Thao tác nhanh</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Link
+              to="/book-appointment"
+              className="card card-hover p-4 text-center"
+            >
+              <div className="bg-primary-50 rounded-lg p-3 w-fit mx-auto mb-3">
+                <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
               </div>
-            ))}
+              <p className="font-semibold text-neutral-dark mb-1">Đặt lịch hẹn mới</p>
+              <p className="text-xs text-neutral-medium">Đặt lịch hẹn với bác sĩ</p>
+            </Link>
+
+            <Link
+              to="/appointments"
+              className="card card-hover p-4 text-center"
+            >
+              <div className="bg-secondary-50 rounded-lg p-3 w-fit mx-auto mb-3">
+                <svg className="h-8 w-8 text-secondary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              </div>
+              <p className="font-semibold text-neutral-dark mb-1">Xem lịch hẹn</p>
+              <p className="text-xs text-neutral-medium">Quản lý lịch hẹn của bạn</p>
+            </Link>
+
+            <Link
+              to="/medical-history"
+              className="card card-hover p-4 text-center"
+            >
+              <div className="bg-accent-50 rounded-lg p-3 w-fit mx-auto mb-3">
+                <svg className="h-8 w-8 text-accent-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <p className="font-semibold text-neutral-dark mb-1">Lịch sử khám bệnh</p>
+              <p className="text-xs text-neutral-medium">Xem lịch sử khám của bạn</p>
+            </Link>
+
+            <Link
+              to="/favorite-doctors"
+              className="card card-hover p-4 text-center"
+            >
+              <div className="bg-warm-200 rounded-lg p-3 w-fit mx-auto mb-3">
+                <HeartIcon className="h-8 w-8 text-status-error" />
+              </div>
+              <p className="font-semibold text-neutral-dark mb-1">Bác sĩ yêu thích</p>
+              <p className="text-xs text-neutral-medium">Xem bác sĩ yêu thích</p>
+            </Link>
           </div>
-        )}
+        </div>
+
+        {/* Upcoming Appointments */}
+        <div className="card">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="card-title mb-1">Lịch hẹn sắp tới</h2>
+              <p className="text-sm text-neutral-medium">Các lịch hẹn đã được xác nhận</p>
+            </div>
+            <Link to="/appointments" className="btn btn-outline btn-sm">
+              Xem tất cả
+            </Link>
+          </div>
+          {upcomingAppointments.length === 0 ? (
+            <div className="empty-state py-8">
+              <CalendarIcon className="empty-state-icon" />
+              <h3 className="empty-state-title">Không có lịch hẹn sắp tới</h3>
+              <p className="empty-state-description">Bạn chưa có lịch hẹn nào đã được xác nhận</p>
+              <Link to="/book-appointment" className="btn btn-primary mt-4">
+                Đặt lịch hẹn ngay
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {upcomingAppointments.map((apt, index) => (
+                <div
+                  key={apt.id}
+                  className="card card-hover p-4 slide-in"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="bg-primary-50 rounded-lg p-2">
+                          <CalendarIcon className="w-5 h-5 text-primary-600" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-neutral-dark">
+                            {apt.doctor_name || 'Bác sĩ'}
+                          </p>
+                          {apt.doctor_speciality && (
+                            <p className="text-xs text-neutral-medium">{apt.doctor_speciality}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="ml-12 space-y-1">
+                        <p className="text-sm text-neutral-dark">
+                          <span className="font-medium">Ngày:</span>{' '}
+                          {format(new Date(apt.appointmentDate), 'dd/MM/yyyy')} lúc{' '}
+                          {apt.startTime || format(new Date(apt.appointmentDate), 'HH:mm')}
+                        </p>
+                        <p className="text-sm text-neutral-medium">
+                          <span className="font-medium">Dịch vụ:</span> {apt.service_name || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="badge badge-info">Đã xác nhận</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </Layout>
   );

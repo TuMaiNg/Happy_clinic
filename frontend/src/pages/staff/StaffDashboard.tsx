@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../config/api';
 import { format } from 'date-fns';
-import { CheckCircleIcon } from '@heroicons/react/24/outline';
+import { 
+  CheckCircleIcon, 
+  CurrencyDollarIcon, 
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  XMarkIcon
+} from '@heroicons/react/24/outline';
 import { StaffHeader } from './StaffHeader';
 import { SkeletonAppointmentCard } from '../../components/common/Skeleton';
+import { PaymentModal } from './PaymentModal';
 import './styles.css';
 
 interface Appointment {
@@ -12,6 +19,7 @@ interface Appointment {
   patient_phone: string;
   doctor_name: string;
   service_name: string;
+  service_price?: number;
   appointment_date: string;
   start_time: string;
   status: string;
@@ -19,8 +27,13 @@ interface Appointment {
 
 export const StaffDashboard: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'today' | 'pending'>('today');
+  const [filter, setFilter] = useState<'today' | 'pending' | 'payment'>('today');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
   const loadAppointments = useCallback(async () => {
     try {
@@ -29,24 +42,28 @@ export const StaffDashboard: React.FC = () => {
       if (filter === 'today') {
         const today = format(new Date(), 'yyyy-MM-dd');
         url += `?fromDate=${today}&toDate=${today}`;
-      } else {
+      } else if (filter === 'pending') {
         url += '?status=pending';
+      } else if (filter === 'payment') {
+        // Load appointments that need payment (confirmed, checked-in, completed)
+        url += '?status=confirmed,checked-in,completed';
       }
       const response = await api.get(url);
       const rawAppointments = response.data.data || [];
-      setAppointments(
-        rawAppointments.map((apt: any) => ({
-          id: apt.id,
-          patient_name: apt.patient_name || 'N/A',
-          patient_phone: apt.patient_phone || 'N/A',
-          doctor_name: apt.doctor_name || 'N/A',
-          service_name: apt.service_name || 'N/A',
-          appointment_date:
-            apt.appointmentDate || apt.appointment_date || '',
-          start_time: apt.startTime || apt.start_time || 'N/A',
-          status: apt.status,
-        }))
-      );
+      const mappedAppointments = rawAppointments.map((apt: any) => ({
+        id: apt.id,
+        patient_name: apt.patient_name || 'N/A',
+        patient_phone: apt.patient_phone || 'N/A',
+        doctor_name: apt.doctor_name || 'N/A',
+        service_name: apt.service_name || 'N/A',
+        service_price: apt.service_price || 0,
+        appointment_date:
+          apt.appointmentDate || apt.appointment_date || '',
+        start_time: apt.startTime || apt.start_time || 'N/A',
+        status: apt.status,
+      }));
+      
+      setAllAppointments(mappedAppointments);
     } catch (error) {
       console.error('Failed to load appointments:', error);
     } finally {
@@ -57,6 +74,36 @@ export const StaffDashboard: React.FC = () => {
   useEffect(() => {
     loadAppointments();
   }, [loadAppointments]);
+
+  // Filter appointments
+  useEffect(() => {
+    let filtered = allAppointments;
+    
+    // Filter by payment tab
+    if (filter === 'payment') {
+      filtered = filtered.filter(apt => 
+        ['confirmed', 'checked-in', 'completed'].includes(apt.status)
+      );
+    }
+    
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(apt => apt.status === statusFilter);
+    }
+    
+    // Filter by search term
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(apt => 
+        apt.patient_name.toLowerCase().includes(term) ||
+        apt.patient_phone.includes(term) ||
+        apt.doctor_name.toLowerCase().includes(term) ||
+        apt.service_name.toLowerCase().includes(term)
+      );
+    }
+    
+    setAppointments(filtered);
+  }, [allAppointments, filter, statusFilter, searchTerm]);
 
   const handleConfirm = async (id: number) => {
     if (!window.confirm('Xác nhận lịch hẹn này?')) return;
@@ -98,20 +145,79 @@ export const StaffDashboard: React.FC = () => {
     <div className="staff-dashboard">
       <StaffHeader />
       <div className="dashboard-content">
+        {/* Main Filter Tabs */}
         <div className="filter-tabs">
           <button
             className={`tab ${filter === 'today' ? 'active' : ''}`}
-            onClick={() => setFilter('today')}
+            onClick={() => {
+              setFilter('today');
+              setStatusFilter('all');
+              setSearchTerm('');
+            }}
           >
             Hôm nay
           </button>
           <button
             className={`tab ${filter === 'pending' ? 'active' : ''}`}
-            onClick={() => setFilter('pending')}
+            onClick={() => {
+              setFilter('pending');
+              setStatusFilter('all');
+              setSearchTerm('');
+            }}
           >
             Chờ xác nhận
           </button>
+          <button
+            className={`tab ${filter === 'payment' ? 'active' : ''}`}
+            onClick={() => {
+              setFilter('payment');
+              setStatusFilter('all');
+              setSearchTerm('');
+            }}
+          >
+            <CurrencyDollarIcon className="btn-icon" style={{ width: '16px', height: '16px', marginRight: '4px' }} />
+            Cần thanh toán
+          </button>
         </div>
+
+        {/* Advanced Filters */}
+        {(filter === 'today' || filter === 'payment') && (
+          <div className="advanced-filters">
+            <div className="search-box">
+              <MagnifyingGlassIcon className="search-icon" />
+              <input
+                type="text"
+                placeholder="Tìm kiếm theo tên, SĐT, bác sĩ, dịch vụ..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="clear-search"
+                  title="Xóa tìm kiếm"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <div className="status-filter-group">
+              <FunnelIcon className="filter-icon" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="status-select"
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="pending">Chờ xác nhận</option>
+                <option value="confirmed">Đã xác nhận</option>
+                <option value="checked-in">Đã check-in</option>
+                <option value="completed">Hoàn thành</option>
+              </select>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="appointments-grid">
@@ -178,11 +284,37 @@ export const StaffDashboard: React.FC = () => {
                     </>
                   )}
                   {appt.status === 'confirmed' && (
+                    <>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => handleCheckIn(appt.id)}
+                      >
+                        Check-in
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          setSelectedAppointment(appt);
+                          setPaymentModalOpen(true);
+                        }}
+                        title="Làm hóa đơn và thanh toán"
+                      >
+                        <CurrencyDollarIcon className="btn-icon" />
+                        Làm hóa đơn
+                      </button>
+                    </>
+                  )}
+                  {(appt.status === 'checked-in' || appt.status === 'completed') && (
                     <button
-                      className="btn btn-primary"
-                      onClick={() => handleCheckIn(appt.id)}
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setSelectedAppointment(appt);
+                        setPaymentModalOpen(true);
+                      }}
+                      title="Làm hóa đơn và thanh toán"
                     >
-                      Check-in
+                      <CurrencyDollarIcon className="btn-icon" />
+                      Làm hóa đơn
                     </button>
                   )}
                 </div>
@@ -191,6 +323,30 @@ export const StaffDashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Payment Modal */}
+      {paymentModalOpen && selectedAppointment && (
+        <PaymentModal
+          isOpen={paymentModalOpen}
+          onClose={() => {
+            setPaymentModalOpen(false);
+            setSelectedAppointment(null);
+          }}
+          appointment={{
+            id: selectedAppointment.id,
+            patient_name: selectedAppointment.patient_name,
+            patient_phone: selectedAppointment.patient_phone,
+            doctor_name: selectedAppointment.doctor_name,
+            service_name: selectedAppointment.service_name,
+            service_price: selectedAppointment.service_price || 0,
+            appointmentDate: selectedAppointment.appointment_date,
+            startTime: selectedAppointment.start_time,
+          }}
+          onSuccess={() => {
+            loadAppointments();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { config } from '../config/env';
 import pool from '../config/database';
 import { scheduleGeneratorService } from '../services/schedule-generator.service';
+import { validateIntParam, validateIntQuery } from '../utils/validation';
 
 // Generate time slots based on schedule
 const generateTimeSlots = async (scheduleId: number, startTime: string, endTime: string, maxPatientsPerSlot: number = 1) => {
@@ -104,7 +105,7 @@ export const createSchedule = async (req: AuthRequest, res: Response) => {
 };
 
 export const getSchedules = async (req: AuthRequest, res: Response) => {
-  const doctorId = req.query.doctorId ? parseInt(req.query.doctorId as string) : undefined;
+  const doctorId = req.query.doctorId ? validateIntParam(req.query.doctorId as string, 'doctorId') : undefined;
   const fromDate = req.query.fromDate ? new Date(req.query.fromDate as string) : undefined;
   const toDate = req.query.toDate ? new Date(req.query.toDate as string) : undefined;
 
@@ -136,7 +137,7 @@ export const updateSchedule = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không có quyền truy cập', 403);
   }
 
-  const scheduleId = parseInt(req.params.id);
+  const scheduleId = validateIntParam(req.params.id, 'scheduleId');
   if (isNaN(scheduleId) || scheduleId <= 0) {
     throw new AppError('ID lịch làm việc không hợp lệ', 400);
   }
@@ -172,7 +173,7 @@ export const deleteSchedule = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không có quyền truy cập', 403);
   }
 
-  const scheduleId = parseInt(req.params.id);
+  const scheduleId = validateIntParam(req.params.id, 'scheduleId');
   if (isNaN(scheduleId) || scheduleId <= 0) {
     throw new AppError('ID lịch làm việc không hợp lệ', 400);
   }

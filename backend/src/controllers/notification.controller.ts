@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { NotificationModel } from '../models/Notification';
 import { AppError } from '../middleware/errorHandler';
+import { validateIntParam, validateIntQuery } from '../utils/validation';
 import pool from '../config/database';
 
 export const getNotifications = async (req: AuthRequest, res: Response) => {
@@ -22,7 +23,7 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
   const userEmail = users[0].email;
 
   const notifications = await NotificationModel.findByRecipient(userEmail, {
-    limit: parseInt(req.query.limit as string) || 50,
+    limit: validateIntQuery(req.query.limit as string, 50, 1, 100),
   });
 
   res.json({

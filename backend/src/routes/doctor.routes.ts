@@ -5,6 +5,7 @@ import asyncHandler from '../middleware/asyncHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { cacheMiddleware } from '../middleware/cache';
 import pool from '../config/database';
+import { validateIntParam } from '../utils/validation';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ router.get('/', cacheMiddleware({ ttl: 300 }), asyncHandler(async (req, res) => 
 
 // Public: Get doctor by ID (cached for 5 minutes)
 router.get('/:id', cacheMiddleware({ ttl: 300 }), asyncHandler(async (req, res) => {
-  const doctor = await DoctorModel.findById(parseInt(req.params.id));
+  const doctor = await DoctorModel.findById(validateIntParam(req.params.id, 'doctorId'));
   if (!doctor) {
     return res.status(404).json({ success: false, message: 'Không tìm thấy bác sĩ' });
   }

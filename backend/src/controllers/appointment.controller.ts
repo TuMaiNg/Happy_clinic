@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { AppointmentModel } from '../models/Appointment';
+import { AppointmentModel, Appointment } from '../models/Appointment';
 import { TimeSlotModel } from '../models/TimeSlot';
 import { ServiceModel } from '../models/Service';
 import { PatientModel } from '../models/Patient';
@@ -11,6 +11,7 @@ import { emitNotification } from '../services/socket.service';
 import { emailService } from '../services/email.service';
 import pool from '../config/database';
 import { differenceInHours, format } from 'date-fns';
+import { validateIntParam, validateIntQuery } from '../utils/validation';
 
 export const createAppointment = async (req: AuthRequest, res: Response) => {
   if (!req.user) {
@@ -343,8 +344,8 @@ export const getAppointments = async (req: AuthRequest, res: Response) => {
   }
 
   const filters: any = {
-    limit: parseInt(req.query.limit as string) || 50,
-    offset: parseInt(req.query.offset as string) || 0,
+    limit: validateIntQuery(req.query.limit as string, 50, 1, 100),
+    offset: validateIntQuery(req.query.offset as string, 0, 0),
   };
 
   if (req.user.role === 'patient') {
@@ -355,7 +356,7 @@ export const getAppointments = async (req: AuthRequest, res: Response) => {
     filters.patientId = patient.id;
   } else if (req.user.role === 'doctor') {
     const doctor = await DoctorModel.findByUserId(req.user.id);
-    if (!doctor) {
+    if (!doctor || !doctor.id) {
       throw new AppError('Không tìm thấy thông tin bác sĩ', 404);
     }
     filters.doctorId = doctor.id;
@@ -365,10 +366,26 @@ export const getAppointments = async (req: AuthRequest, res: Response) => {
     filters.status = req.query.status;
   }
   if (req.query.fromDate) {
-    filters.fromDate = new Date(req.query.fromDate as string);
+    try {
+      const fromDate = new Date(req.query.fromDate as string);
+      if (!isNaN(fromDate.getTime())) {
+        filters.fromDate = fromDate;
+      }
+    } catch (error) {
+      // Invalid date, skip filter
+      console.warn('Invalid fromDate:', req.query.fromDate);
+    }
   }
   if (req.query.toDate) {
-    filters.toDate = new Date(req.query.toDate as string);
+    try {
+      const toDate = new Date(req.query.toDate as string);
+      if (!isNaN(toDate.getTime())) {
+        filters.toDate = toDate;
+      }
+    } catch (error) {
+      // Invalid date, skip filter
+      console.warn('Invalid toDate:', req.query.toDate);
+    }
   }
 
   const appointments = await AppointmentModel.findAll(filters);
@@ -380,7 +397,7 @@ export const getAppointmentById = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không có quyền truy cập', 403);
   }
 
-  const appointmentId = parseInt(req.params.id);
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
   const appointment = await AppointmentModel.findById(appointmentId);
 
   if (!appointment) {
@@ -413,7 +430,7 @@ export const confirmAppointment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Chỉ nhân viên mới có thể xác nhận lịch hẹn', 403);
   }
 
-  const appointmentId = parseInt(req.params.id);
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
   const appointment = await AppointmentModel.findById(appointmentId);
 
   if (!appointment) {
@@ -497,7 +514,7 @@ export const cancelAppointment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không có quyền truy cập', 403);
   }
 
-  const appointmentId = parseInt(req.params.id);
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
   const { reason } = req.body;
   const appointment = await AppointmentModel.findById(appointmentId);
 
@@ -604,7 +621,7 @@ export const checkInAppointment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không có quyền truy cập', 403);
   }
 
-  const appointmentId = parseInt(req.params.id);
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
   const appointment = await AppointmentModel.findById(appointmentId);
 
   if (!appointment) {
@@ -634,7 +651,7 @@ export const completeAppointment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Chỉ bác sĩ mới có thể hoàn thành lịch hẹn', 403);
   }
 
-  const appointmentId = parseInt(req.params.id);
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
   const { notes } = req.body;
   const appointment = await AppointmentModel.findById(appointmentId);
 
@@ -665,12 +682,268 @@ export const completeAppointment = async (req: AuthRequest, res: Response) => {
   });
 };
 
+export const rescheduleAppointment = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Không có quyền truy cập', 403);
+  }
+
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
+  const { slotId, appointmentDate, reason } = req.body;
+
+  if (!slotId || !appointmentDate) {
+    throw new AppError('Vui lòng điền đầy đủ thông tin (slotId và appointmentDate)', 400);
+  }
+
+  // Get existing appointment
+  const appointment = await AppointmentModel.findById(appointmentId);
+  if (!appointment) {
+    throw new AppError('Không tìm thấy lịch hẹn', 404);
+  }
+
+  // Check authorization - patient can only reschedule their own appointments
+  const userRole = req.user.role;
+  const isStaffOrAdmin = ['staff', 'admin'].includes(userRole);
+  
+  if (!isStaffOrAdmin) {
+    if (userRole === 'patient') {
+      const patient = await PatientModel.findByUserId(req.user.id);
+      if (!patient || patient.id !== appointment.patientId) {
+        throw new AppError('Bạn không có quyền đổi lịch hẹn này', 403);
+      }
+    } else if (userRole === 'doctor') {
+      const doctor = await DoctorModel.findByUserId(req.user.id);
+      if (!doctor || doctor.id !== appointment.doctorId) {
+        throw new AppError('Bạn không có quyền đổi lịch hẹn này', 403);
+      }
+    }
+  }
+
+  // Check if appointment can be rescheduled
+  if (!['pending', 'confirmed'].includes(appointment.status)) {
+    throw new AppError('Lịch hẹn này không thể đổi lịch. Chỉ có thể đổi lịch hẹn đang chờ xác nhận hoặc đã xác nhận.', 400);
+  }
+
+  // Validate new appointment date
+  let newAppointmentDateTime: Date;
+  try {
+    newAppointmentDateTime = new Date(appointmentDate);
+    if (isNaN(newAppointmentDateTime.getTime())) {
+      throw new AppError('Ngày giờ đặt lịch không hợp lệ', 400);
+    }
+  } catch (error) {
+    throw new AppError('Ngày giờ đặt lịch không hợp lệ', 400);
+  }
+
+  const now = new Date();
+  const hoursUntilNewAppointment = differenceInHours(newAppointmentDateTime, now);
+  
+  if (hoursUntilNewAppointment < config.businessRules.minLeadTimeHours) {
+    throw new AppError(
+      `Bạn chỉ có thể đổi lịch tối thiểu ${config.businessRules.minLeadTimeHours} giờ trước giờ khám mới`,
+      400
+    );
+  }
+
+  // Verify new time slot
+  const newTimeSlot = await TimeSlotModel.findById(slotId);
+  if (!newTimeSlot) {
+    throw new AppError('Khung giờ mới không tồn tại', 404);
+  }
+
+  if (!newTimeSlot.isAvailable || newTimeSlot.patientCount >= newTimeSlot.capacity) {
+    throw new AppError('Khung giờ mới đã hết chỗ. Vui lòng chọn khung giờ khác.', 409);
+  }
+
+  // Check if new slot is different from current slot
+  if (appointment.slotId === slotId) {
+    throw new AppError('Khung giờ mới phải khác với khung giờ hiện tại', 400);
+  }
+
+  // Check for duplicates with new slot
+  const existingAppointments = await AppointmentModel.findAll({ 
+    patientId: appointment.patientId, 
+    doctorId: appointment.doctorId 
+  });
+  const newDateStr = appointmentDate.split('T')[0];
+  
+  const hasDuplicate = existingAppointments.some(apt => {
+    if (apt.id === appointmentId) return false; // Skip current appointment
+    if (apt.status === 'cancelled' || apt.status === 'no-show') return false;
+    const aptDateStr = new Date(apt.appointmentDate).toISOString().split('T')[0];
+    return aptDateStr === newDateStr && apt.slotId === slotId;
+  });
+
+  if (hasDuplicate) {
+    throw new AppError('Bạn đã có lịch hẹn khác vào khung giờ mới này', 409);
+  }
+
+  // Use transaction to ensure atomicity
+  const connection = await pool.getConnection();
+  let updated: Appointment | null = null;
+
+  try {
+    await connection.beginTransaction();
+
+    // Lock both old and new slots
+    const [oldSlotRows] = await connection.query(
+      `SELECT * FROM time_slots WHERE id = ? FOR UPDATE`,
+      [appointment.slotId]
+    ) as any[];
+    
+    const [newSlotRows] = await connection.query(
+      `SELECT * FROM time_slots WHERE id = ? FOR UPDATE`,
+      [slotId]
+    ) as any[];
+
+    const oldSlot = oldSlotRows?.[0];
+    const newSlot = newSlotRows?.[0];
+
+    if (!oldSlot || !newSlot) {
+      await connection.rollback();
+      throw new AppError('Khung giờ không tồn tại', 404);
+    }
+
+    // Re-check new slot availability after locking
+    if (!newSlot.is_available || newSlot.patient_count >= newSlot.capacity) {
+      await connection.rollback();
+      throw new AppError('Khung giờ mới đã hết chỗ. Vui lòng chọn khung giờ khác.', 409);
+    }
+
+    // Decrement old slot patient count
+    // Use same logic as TimeSlotModel.decrementPatientCount for consistency
+    await connection.query(
+      `UPDATE time_slots 
+       SET patient_count = GREATEST(patient_count - 1, 0),
+           is_available = CASE WHEN GREATEST(patient_count - 1, 0) < capacity THEN 1 ELSE 0 END,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [appointment.slotId]
+    );
+
+    // Increment new slot patient count
+    await connection.query(
+      `UPDATE time_slots 
+       SET patient_count = patient_count + 1,
+           is_available = CASE WHEN patient_count + 1 >= capacity THEN 0 ELSE 1 END,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [slotId]
+    );
+
+    // Update appointment with new slot and date/time
+    const [hours, minutes] = newTimeSlot.startTime.split(':');
+    const appointmentDateTimeStr = `${newDateStr}T${hours}:${minutes}:00`;
+    
+    await connection.query(
+      `UPDATE appointments 
+       SET slot_id = ?,
+           schedule_id = (SELECT schedule_id FROM time_slots WHERE id = ?),
+           appointment_date = ?,
+           start_time = ?,
+           end_time = ?,
+           status = 'pending',
+           updated_at = NOW()
+       WHERE id = ?`,
+      [slotId, slotId, appointmentDateTimeStr, newTimeSlot.startTime, newTimeSlot.endTime, appointmentId]
+    );
+
+    await connection.commit();
+
+    // Get updated appointment
+    updated = await AppointmentModel.findById(appointmentId);
+    if (!updated) {
+      throw new AppError('Không thể lấy thông tin lịch hẹn sau khi đổi lịch', 500);
+    }
+
+    // Send reschedule notification email
+    try {
+      const [patientRows] = await pool.query(
+        'SELECT p.*, p.email as email_fallback, u.email FROM patients p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?',
+        [appointment.patientId]
+      ) as any[];
+      const patient = patientRows?.[0];
+      
+      const patientEmail = patient?.email || patient?.email_fallback;
+
+      const [doctorRows] = await pool.query(
+        'SELECT * FROM doctors WHERE id = ?',
+        [appointment.doctorId]
+      ) as any[];
+      const doctor = doctorRows?.[0];
+
+      const [serviceRows] = await pool.query(
+        'SELECT * FROM services WHERE id = ?',
+        [appointment.serviceId]
+      ) as any[];
+      const service = serviceRows?.[0];
+
+      if (patientEmail && patient && doctor && service) {
+        await emailService.sendAppointmentRescheduled({
+          patientName: patient.full_name,
+          doctorName: doctor.full_name,
+          serviceName: service.name,
+          oldDateTime: `${format(new Date(appointment.appointmentDate), 'dd/MM/yyyy')} lúc ${appointment.startTime}`,
+          newDateTime: `${format(new Date(updated.appointmentDate), 'dd/MM/yyyy')} lúc ${updated.startTime}`,
+          reason: reason || 'Không có',
+          patientEmail: patientEmail,
+        }).catch((error) => {
+          // Log error but don't fail the request if email fails
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to send reschedule email:', error);
+          }
+        });
+      }
+    } catch (error) {
+      // Log error but don't fail the request if email fails
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to send reschedule email:', error);
+      }
+    }
+
+    // Send in-app notification to patient
+    try {
+      const [patientRows] = await pool.query(
+        'SELECT p.*, u.id as user_id FROM patients p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?',
+        [appointment.patientId]
+      ) as any[];
+      const patient = patientRows?.[0];
+
+      if (patient && patient.user_id) {
+        emitNotification(patient.user_id, {
+          type: 'appointment_rescheduled',
+          title: 'Lịch hẹn đã được đổi',
+          message: `Lịch hẹn của bạn đã được đổi sang ${format(new Date(updated.appointmentDate), 'dd/MM/yyyy')} lúc ${updated.startTime}`,
+          appointmentId: appointmentId,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send reschedule notification:', error);
+    }
+
+  } catch (error: any) {
+    await connection.rollback();
+    if (error instanceof AppError) {
+      throw error;
+    }
+    console.error('Error rescheduling appointment:', error);
+    throw new AppError('Không thể đổi lịch hẹn: ' + (error.message || 'Lỗi không xác định'), 500);
+  } finally {
+    connection.release();
+  }
+
+  res.json({
+    success: true,
+    message: 'Đổi lịch hẹn thành công. Lịch hẹn sẽ cần được xác nhận lại.',
+    data: updated,
+  });
+};
+
 export const deleteAppointment = async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     throw new AppError('Không có quyền truy cập', 403);
   }
 
-  const appointmentId = parseInt(req.params.id);
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
   const appointment = await AppointmentModel.findById(appointmentId);
   if (!appointment) {
     throw new AppError('Không tìm thấy lịch hẹn', 404);

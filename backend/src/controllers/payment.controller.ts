@@ -5,6 +5,7 @@ import { AppointmentModel } from '../models/Appointment';
 import { ServiceModel } from '../models/Service';
 import { AppError } from '../middleware/errorHandler';
 import { emitNotification } from '../services/socket.service';
+import { validateIntParam, validateIntQuery } from '../utils/validation';
 
 export const createPayment = async (req: AuthRequest, res: Response) => {
   if (!req.user) {
@@ -75,8 +76,8 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
   }
 
   const filters: any = {
-    limit: parseInt(req.query.limit as string) || 50,
-    offset: parseInt(req.query.offset as string) || 0,
+    limit: validateIntQuery(req.query.limit as string, 50, 1, 100),
+    offset: validateIntQuery(req.query.offset as string, 0, 0),
   };
 
   // Role-based filtering
@@ -91,6 +92,9 @@ export const getPayments = async (req: AuthRequest, res: Response) => {
 
   if (req.query.status) {
     filters.status = req.query.status;
+  }
+  if (req.query.appointmentId) {
+    filters.appointmentId = validateIntParam(req.query.appointmentId as string, 'appointmentId');
   }
   if (req.query.fromDate) {
     filters.fromDate = new Date(req.query.fromDate as string);
@@ -112,7 +116,7 @@ export const getPaymentById = async (req: AuthRequest, res: Response) => {
     throw new AppError('Không có quyền truy cập', 403);
   }
 
-  const paymentId = parseInt(req.params.id);
+  const paymentId = validateIntParam(req.params.id, 'paymentId');
   const payment = await PaymentModel.findById(paymentId);
 
   if (!payment) {
@@ -140,7 +144,7 @@ export const confirmPayment = async (req: AuthRequest, res: Response) => {
     throw new AppError('Chỉ nhân viên mới có thể xác nhận thanh toán', 403);
   }
 
-  const paymentId = parseInt(req.params.id);
+  const paymentId = validateIntParam(req.params.id, 'paymentId');
   const payment = await PaymentModel.findById(paymentId);
 
   if (!payment) {

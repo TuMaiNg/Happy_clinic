@@ -29,53 +29,97 @@ export const register = async (req: AuthRequest, res: Response) => {
     throw new AppError(`Mật khẩu không đủ mạnh: ${passwordValidation.errors.join(', ')}`, 400);
   }
 
-  // Check if email already exists
-  const existingUser = await UserModel.findByEmail(email);
-  if (existingUser) {
-    throw new AppError('Email đã được sử dụng', 409);
-  }
-
-  // Check if phone already exists
-  const [existingPhone] = await pool.query(
-    'SELECT id FROM patients WHERE phone = ?',
-    [phone]
-  ) as any[];
-  if (existingPhone.length > 0) {
-    throw new AppError('Số điện thoại đã được sử dụng', 409);
-  }
-
+  // Note: Email and phone checks are now done inside transaction to prevent race conditions
   const passwordHash = await hashPassword(password);
 
+  // Use transaction with connection to ensure atomicity
+  const connection = await pool.getConnection();
+  
   try {
-    // Start transaction
-    await pool.query('START TRANSACTION');
+    await connection.beginTransaction();
+
+    // Check if email already exists (inside transaction to prevent race condition)
+    const [existingUserRows] = await connection.query(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
+    ) as any[];
+    if (existingUserRows.length > 0) {
+      await connection.rollback();
+      connection.release();
+      throw new AppError('Email đã được sử dụng', 409);
+    }
+
+    // Check if phone already exists (inside transaction to prevent race condition)
+    const [existingPhoneRows] = await connection.query(
+      'SELECT id FROM patients WHERE phone = ?',
+      [phone]
+    ) as any[];
+    if (existingPhoneRows.length > 0) {
+      await connection.rollback();
+      connection.release();
+      throw new AppError('Số điện thoại đã được sử dụng', 409);
+    }
 
     // Create user account (role = patient only for public registration)
-    const user = await UserModel.create({
-      email,
-      passwordHash,
-      role: 'patient', // Public registration is ONLY for patients
-      status: 'active',
-    });
+    const [userResult] = await connection.query(
+      `INSERT INTO users (email, password_hash, role, status) 
+       VALUES (?, ?, ?, ?)`,
+      [email, passwordHash, 'patient', 'active']
+    ) as any;
 
-    // Safety check: ensure user was created with an ID
-    if (!user.id) {
+    const userId = userResult.insertId;
+    if (!userId) {
+      await connection.rollback();
+      connection.release();
       throw new AppError('Lỗi khi tạo tài khoản người dùng', 500);
     }
 
+    // Get created user
+    const [userRows] = await connection.query(
+      'SELECT * FROM users WHERE id = ?',
+      [userId]
+    ) as any[];
+    const user = {
+      id: userRows[0].id,
+      email: userRows[0].email,
+      passwordHash: userRows[0].password_hash,
+      role: userRows[0].role,
+      status: userRows[0].status,
+    };
+
     // Create patient record
-    const patient = await PatientModel.create({
-      userId: user.id,
-      fullName,
-      phone,
-      email, // Store email in patient record too
-      birthday: birthday ? new Date(birthday) : undefined,
-      gender,
-      address,
-    });
+    const [patientResult] = await connection.query(
+      `INSERT INTO patients (user_id, full_name, phone, email, birthday, gender, address) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        fullName,
+        phone,
+        email,
+        birthday ? new Date(birthday) : null,
+        gender || null,
+        address || null,
+      ]
+    ) as any;
+
+    const patientId = patientResult.insertId;
+    
+    // Get created patient
+    const [patientRows] = await connection.query(
+      'SELECT * FROM patients WHERE id = ?',
+      [patientId]
+    ) as any[];
+    const patient = {
+      id: patientRows[0].id,
+      userId: patientRows[0].user_id,
+      fullName: patientRows[0].full_name,
+      phone: patientRows[0].phone,
+      email: patientRows[0].email,
+    };
 
     // Commit transaction
-    await pool.query('COMMIT');
+    await connection.commit();
+    connection.release();
 
     const tokens = generateTokens({
       userId: user.id,
@@ -112,9 +156,15 @@ export const register = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     // Attempt to rollback transaction, but don't let rollback errors mask the original error
     try {
-      await pool.query('ROLLBACK');
+      if (connection) {
+        await connection.rollback();
+      }
     } catch (rollbackError) {
       console.error('Error during transaction rollback:', rollbackError);
+    } finally {
+      if (connection) {
+        connection.release();
+      }
     }
     
     if (error instanceof AppError) {

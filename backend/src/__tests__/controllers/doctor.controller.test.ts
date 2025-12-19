@@ -12,6 +12,13 @@ jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
     query: jest.fn(),
+    getConnection: jest.fn().mockResolvedValue({
+      beginTransaction: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+      query: jest.fn().mockResolvedValue([[]]),
+    }),
   },
 }));
 
@@ -117,14 +124,37 @@ describe('Doctor Controller', () => {
         speciality: 'Cardiology',
       };
 
+      // mysql2 connection.query returns [result, fields] where result for INSERT has insertId
+      // Code uses: const [userResult] = await connection.query(...) which destructures [result, fields] to get result
+      // So mock needs to return [result, fields] where result has insertId
+      const userInsertResult = { insertId: 1 };
+      const doctorInsertResult = { insertId: 1 };
+      
+      const mockConnection = {
+        beginTransaction: jest.fn().mockResolvedValue(undefined),
+        commit: jest.fn().mockResolvedValue(undefined),
+        rollback: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
+        query: jest.fn()
+          .mockResolvedValueOnce([[]]) // Check email - SELECT returns [rows, fields]
+          .mockResolvedValueOnce([[]]) // Check phone - SELECT returns [rows, fields]
+          .mockResolvedValueOnce([userInsertResult, []]) // User INSERT - returns [result, fields], when destructured [userResult] gets { insertId: 1 }
+          .mockResolvedValueOnce([[{ id: 1, email: 'doctor@example.com', role: 'doctor' }], []]) // Get user - [rows, fields]
+          .mockResolvedValueOnce([doctorInsertResult, []]), // Doctor INSERT - [result, fields]
+      };
+
       (UserModel.findByEmail as jest.Mock).mockResolvedValue(null);
       (hashPassword as jest.Mock).mockResolvedValue('hashed_password');
-      (UserModel.create as jest.Mock).mockResolvedValue(mockUser);
-      (DoctorModel.create as jest.Mock).mockResolvedValue(mockDoctor);
+      (UserModel.create as jest.Mock).mockResolvedValue({ ...mockUser, id: 1 });
+      (DoctorModel.create as jest.Mock).mockResolvedValue({ ...mockDoctor, id: 1 });
       
-      pool.query = jest.fn()
-        .mockResolvedValueOnce([[]]) // User insert
-        .mockResolvedValueOnce([[]]); // Doctor insert
+      // Mock pool.getConnection to return our mock connection
+      (pool.getConnection as jest.Mock).mockResolvedValue(mockConnection);
+      
+      // Mock pool.query for queries after transaction (outside connection)
+      (pool.query as jest.Mock).mockResolvedValue([
+        [{ id: 1, full_name: 'Dr. Test', speciality: 'Cardiology' }],
+      ]);
 
       await doctorController.createDoctor(mockReq as AuthRequest, mockRes as Response);
 

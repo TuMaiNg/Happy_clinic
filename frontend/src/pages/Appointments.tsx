@@ -7,14 +7,20 @@ import { useToast } from '../contexts/ToastContext';
 import { Layout } from '../components/layout/Layout';
 import { AppointmentCard } from '../components/features/appointments/AppointmentCard';
 import { CancelAppointmentModal } from '../components/features/appointments/CancelAppointmentModal';
+import { RescheduleAppointmentModal } from '../components/features/appointments/RescheduleAppointmentModal';
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 
 export const Appointments: React.FC = () => {
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [allAppointments, setAllAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const { success: showSuccessToast, error: showErrorToast } = useToast();
   const [paymentStatusMap, setPaymentStatusMap] = useState<Record<number, 'paid' | 'failed' | string>>({});
@@ -24,9 +30,26 @@ export const Appointments: React.FC = () => {
       setLoading(true);
       const response = await appointmentService.getAll({
         status: filter === 'all' ? undefined : filter,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
       });
       const list = response.data || [];
-      setAppointments(list);
+      setAllAppointments(list);
+      
+      // Apply search filter if any
+      let filtered = list;
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        filtered = list.filter(
+          (apt: any) =>
+            apt.doctor_name?.toLowerCase().includes(term) ||
+            apt.service_name?.toLowerCase().includes(term) ||
+            apt.doctor_speciality?.toLowerCase().includes(term) ||
+            apt.patient_name?.toLowerCase().includes(term)
+        );
+      }
+      
+      setAppointments(filtered);
 
       // Load payments to determine payment status per appointment (latest payment wins)
       try {
@@ -57,7 +80,7 @@ export const Appointments: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, fromDate, toDate, searchTerm]);
 
   useEffect(() => {
     loadAppointments();
@@ -79,6 +102,26 @@ export const Appointments: React.FC = () => {
   const handleCancelClick = (appointment: any) => {
     setSelectedAppointment(appointment);
     setCancelModalOpen(true);
+  };
+
+  const handleRescheduleClick = (appointment: any) => {
+    setSelectedAppointment(appointment);
+    setRescheduleModalOpen(true);
+  };
+
+  const handleRescheduleConfirm = async (slotId: number, appointmentDate: string, reason?: string) => {
+    if (!selectedAppointment) return;
+    
+    try {
+      await appointmentService.reschedule(selectedAppointment.id, slotId, appointmentDate, reason);
+      showSuccessToast('Đổi lịch hẹn thành công! Lịch hẹn sẽ cần được xác nhận lại.');
+      setRescheduleModalOpen(false);
+      setSelectedAppointment(null);
+      await loadAppointments();
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'Đổi lịch thất bại. Vui lòng thử lại.';
+      throw new Error(errorMessage);
+    }
   };
 
   const handleCancelConfirm = async (reason: string) => {
@@ -128,21 +171,68 @@ export const Appointments: React.FC = () => {
             </Link>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            {['all', 'pending', 'confirmed', 'completed', 'cancelled'].map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f as any)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filter === f
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-neutral-light text-neutral-medium hover:bg-neutral-border'
-                }`}
-              >
-                {f === 'all' ? 'Tất cả' : getStatusText(f)}
-              </button>
-            ))}
+          {/* Search and Filters */}
+          <div className="space-y-4 mb-6">
+            {/* Search Bar */}
+            <div>
+              <input
+                type="text"
+                placeholder="Tìm kiếm theo tên bác sĩ, dịch vụ, chuyên khoa..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 border-2 border-neutral-border rounded-lg focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+              />
+            </div>
+
+            {/* Date Range Filters */}
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-sm font-medium text-neutral-dark mb-1">Từ ngày</label>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="w-full px-4 py-2 border-2 border-neutral-border rounded-lg focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+                />
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-sm font-medium text-neutral-dark mb-1">Đến ngày</label>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="w-full px-4 py-2 border-2 border-neutral-border rounded-lg focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+                />
+              </div>
+              {(fromDate || toDate) && (
+                <button
+                  onClick={() => {
+                    setFromDate('');
+                    setToDate('');
+                  }}
+                  className="px-4 py-2 text-sm text-neutral-medium hover:text-neutral-dark"
+                >
+                  Xóa bộ lọc
+                </button>
+              )}
+            </div>
+
+            {/* Status Filters */}
+            <div className="flex flex-wrap gap-2">
+              {['all', 'pending', 'confirmed', 'completed', 'cancelled'].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f as any)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filter === f
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-neutral-light text-neutral-medium hover:bg-neutral-border'
+                  }`}
+                >
+                  {f === 'all' ? 'Tất cả' : getStatusText(f)}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Appointments List */}
@@ -152,10 +242,28 @@ export const Appointments: React.FC = () => {
             </div>
           ) : appointments.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-neutral-medium mb-4">Không có lịch hẹn nào</p>
-              <Link to="/book-appointment">
-                <Button variant="primary">Đặt lịch hẹn đầu tiên</Button>
-              </Link>
+              <p className="text-neutral-medium mb-4">
+                {searchTerm || fromDate || toDate 
+                  ? 'Không tìm thấy lịch hẹn nào phù hợp với bộ lọc'
+                  : 'Không có lịch hẹn nào'}
+              </p>
+              {(searchTerm || fromDate || toDate) && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFromDate('');
+                    setToDate('');
+                  }}
+                  className="text-primary-600 hover:text-primary-700 mb-4 block"
+                >
+                  Xóa bộ lọc
+                </button>
+              )}
+              {!searchTerm && !fromDate && !toDate && (
+                <Link to="/book-appointment">
+                  <Button variant="primary">Đặt lịch hẹn đầu tiên</Button>
+                </Link>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -165,6 +273,7 @@ export const Appointments: React.FC = () => {
                   appointment={apt}
                   paymentStatus={paymentStatusMap[apt.id]}
                   onCancel={() => handleCancelClick(apt)}
+                  onReschedule={() => handleRescheduleClick(apt)}
                   onCheckIn={() => handleCheckIn(apt.id)}
                   onDelete={() => handleDelete(apt.id)}
                 />
@@ -185,6 +294,18 @@ export const Appointments: React.FC = () => {
         onConfirm={handleCancelConfirm}
         cancellationFee={selectedAppointment?.cancellationFee || 0}
       />
+
+      {selectedAppointment && (
+        <RescheduleAppointmentModal
+          isOpen={rescheduleModalOpen}
+          onClose={() => {
+            setRescheduleModalOpen(false);
+            setSelectedAppointment(null);
+          }}
+          appointment={selectedAppointment}
+          onConfirm={handleRescheduleConfirm}
+        />
+      )}
     </Layout>
   );
 };

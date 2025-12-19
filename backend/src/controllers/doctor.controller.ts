@@ -6,6 +6,7 @@ import { hashPassword } from '../utils/bcrypt';
 import { AppError } from '../middleware/errorHandler';
 import pool from '../config/database';
 import { validatePassword, validateEmail } from '../utils/passwordValidator';
+import { validateIntParam } from '../utils/validation';
 
 export const createDoctor = async (req: AuthRequest, res: Response) => {
   if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'staff')) {
@@ -46,30 +47,79 @@ export const createDoctor = async (req: AuthRequest, res: Response) => {
 
   const passwordHash = await hashPassword(password);
 
+  // Use transaction with connection to ensure atomicity
+  const connection = await pool.getConnection();
+  
   try {
-    // Start transaction
-    await pool.query('START TRANSACTION');
+    await connection.beginTransaction();
+
+    // Check if email already exists (inside transaction to prevent race condition)
+    const [existingUserRows] = await connection.query(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
+    ) as any[];
+    if (existingUserRows.length > 0) {
+      await connection.rollback();
+      connection.release();
+      throw new AppError('Email đã được sử dụng', 409);
+    }
 
     // Create user account with doctor role
-    const user = await UserModel.create({
-      email,
-      passwordHash,
-      role: 'doctor',
-      status: 'active',
-    });
+    const [userResult] = await connection.query(
+      `INSERT INTO users (email, password_hash, role, status) 
+       VALUES (?, ?, ?, ?)`,
+      [email, passwordHash, 'doctor', 'active']
+    ) as any;
+
+    const userId = userResult.insertId;
+    if (!userId) {
+      await connection.rollback();
+      connection.release();
+      throw new AppError('Lỗi khi tạo tài khoản người dùng', 500);
+    }
+
+    // Get created user
+    const [userRows] = await connection.query(
+      'SELECT * FROM users WHERE id = ?',
+      [userId]
+    ) as any[];
+    const user = {
+      id: userRows[0].id,
+      email: userRows[0].email,
+      role: userRows[0].role,
+    };
 
     // Create doctor record
-    const doctor = await DoctorModel.create({
-      userId: user.id!,
-      fullName,
-      speciality,
-      description: description || undefined,
-      experienceYears: experienceYears ? parseInt(experienceYears) : undefined,
-      licenseNumber: licenseNumber || undefined,
-    });
+    const [doctorResult] = await connection.query(
+      `INSERT INTO doctors (user_id, full_name, speciality, description, experience_years, license_number) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        fullName,
+        speciality,
+        description || null,
+        experienceYears ? parseInt(experienceYears) : null,
+        licenseNumber || null,
+      ]
+    ) as any;
+
+    const doctorId = doctorResult.insertId;
+    
+    // Get created doctor
+    const [doctorRows] = await connection.query(
+      'SELECT * FROM doctors WHERE id = ?',
+      [doctorId]
+    ) as any[];
+    const doctor = {
+      id: doctorRows[0].id,
+      userId: doctorRows[0].user_id,
+      fullName: doctorRows[0].full_name,
+      speciality: doctorRows[0].speciality,
+    };
 
     // Commit transaction
-    await pool.query('COMMIT');
+    await connection.commit();
+    connection.release();
 
     res.status(201).json({
       success: true,
@@ -88,7 +138,18 @@ export const createDoctor = async (req: AuthRequest, res: Response) => {
       },
     });
   } catch (error: any) {
-    await pool.query('ROLLBACK');
+    // Attempt to rollback transaction, but don't let rollback errors mask the original error
+    try {
+      if (connection) {
+        await connection.rollback();
+      }
+    } catch (rollbackError) {
+      console.error('Error during transaction rollback:', rollbackError);
+    } finally {
+      if (connection) {
+        connection.release();
+      }
+    }
     
     if (error.code === 'ER_DUP_ENTRY') {
       throw new AppError('Thông tin đã tồn tại trong hệ thống', 409);
@@ -107,7 +168,7 @@ export const updateDoctor = async (req: AuthRequest, res: Response) => {
     throw new AppError('Chỉ quản trị viên mới có thể cập nhật thông tin bác sĩ', 403);
   }
 
-  const doctorId = parseInt(req.params.id);
+  const doctorId = validateIntParam(req.params.id, 'doctorId');
   if (isNaN(doctorId) || doctorId <= 0) {
     throw new AppError('ID bác sĩ không hợp lệ', 400);
   }
@@ -131,7 +192,7 @@ export const deleteDoctor = async (req: AuthRequest, res: Response) => {
     throw new AppError('Chỉ quản trị viên mới có thể xóa bác sĩ', 403);
   }
 
-  const doctorId = parseInt(req.params.id);
+  const doctorId = validateIntParam(req.params.id, 'doctorId');
   if (isNaN(doctorId) || doctorId <= 0) {
     throw new AppError('ID bác sĩ không hợp lệ', 400);
   }

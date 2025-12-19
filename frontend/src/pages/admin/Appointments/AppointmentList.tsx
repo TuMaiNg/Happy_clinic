@@ -4,11 +4,14 @@ import { format } from 'date-fns';
 import { CreateAppointmentModal } from './CreateAppointmentModal';
 import { AppointmentDetails } from './AppointmentDetails';
 import { useToast } from '../../../contexts/ToastContext';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 export const AppointmentList: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const { success, error } = useToast();
@@ -19,7 +22,9 @@ export const AppointmentList: React.FC = () => {
       const response = await appointmentService.getAll({
         status: statusFilter === 'all' ? undefined : statusFilter,
       });
-      setAppointments(response.data || []);
+      const data = response.data || [];
+      setAppointments(data);
+      setFilteredAppointments(data);
     } catch (err: any) {
       console.error('Error loading appointments:', err);
       error(err.message || 'Không thể tải danh sách lịch hẹn');
@@ -27,6 +32,26 @@ export const AppointmentList: React.FC = () => {
       setLoading(false);
     }
   }, [statusFilter, error]);
+
+  // Filter appointments by search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredAppointments(appointments);
+      return;
+    }
+
+    const term = searchTerm.toLowerCase();
+    const filtered = appointments.filter((apt) => {
+      return (
+        apt.patient_name?.toLowerCase().includes(term) ||
+        apt.doctor_name?.toLowerCase().includes(term) ||
+        apt.service_name?.toLowerCase().includes(term) ||
+        apt.patient_phone?.includes(term) ||
+        apt.id?.toString().includes(term)
+      );
+    });
+    setFilteredAppointments(filtered);
+  }, [searchTerm, appointments]);
 
   useEffect(() => {
     loadAppointments();
@@ -76,117 +101,189 @@ export const AppointmentList: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     const colorMap: { [key: string]: string } = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      confirmed: 'bg-blue-100 text-blue-800',
-      'checked-in': 'bg-green-100 text-green-800',
-      completed: 'bg-gray-100 text-gray-800',
-      cancelled: 'bg-red-100 text-red-800',
-      'no-show': 'bg-orange-100 text-orange-800',
+      pending: 'warning',
+      confirmed: 'info',
+      'checked-in': 'success',
+      completed: 'primary',
+      cancelled: 'error',
+      'no-show': 'warning',
     };
-    return colorMap[status] || 'bg-gray-100 text-gray-800';
+    return colorMap[status] || 'primary';
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Quản lý lịch hẹn</h1>
+    <div className="p-6 fade-in">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-neutral-dark mb-2">Quản lý lịch hẹn</h1>
+          <p className="text-sm text-neutral-medium">Quản lý và theo dõi tất cả lịch hẹn khám bệnh</p>
+        </div>
         <button
           onClick={() => setCreateModalOpen(true)}
-          className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
+          className="btn btn-primary"
         >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
           Tạo lịch hẹn mới
         </button>
       </div>
 
-      <div className="mb-4">
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="all">Tất cả trạng thái</option>
-          <option value="pending">Chờ xác nhận</option>
-          <option value="confirmed">Đã xác nhận</option>
-          <option value="checked-in">Đã check-in</option>
-          <option value="completed">Hoàn thành</option>
-          <option value="cancelled">Đã hủy</option>
-        </select>
+      {/* Filter Section */}
+      <div className="card mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Search */}
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-medium" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm theo tên, số điện thoại, ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="form-input pl-10"
+            />
+          </div>
+          
+          {/* Status Filter */}
+          <div>
+            <label className="form-label mb-0">Lọc theo trạng thái:</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="form-input"
+            >
+              <option value="all">Tất cả trạng thái</option>
+              <option value="pending">Chờ xác nhận</option>
+              <option value="confirmed">Đã xác nhận</option>
+              <option value="checked-in">Đã check-in</option>
+              <option value="completed">Hoàn thành</option>
+              <option value="cancelled">Đã hủy</option>
+            </select>
+          </div>
+
+          {/* Stats */}
+          <div className="flex items-end">
+            <div className="text-sm text-neutral-medium">
+              Hiển thị: <span className="font-semibold text-neutral-dark">
+                {searchTerm ? filteredAppointments.length : appointments.length}
+              </span> / {appointments.length} lịch hẹn
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Content Section */}
       {loading ? (
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
+        <div className="card text-center py-12">
+          <div className="loading-spinner mx-auto mb-4"></div>
+          <p className="text-neutral-medium">Đang tải dữ liệu...</p>
         </div>
-      ) : appointments.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-500">Không có lịch hẹn nào</p>
+      ) : (searchTerm ? filteredAppointments : appointments).length === 0 ? (
+        <div className="card empty-state">
+          <svg className="empty-state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <h3 className="empty-state-title">Không có lịch hẹn nào</h3>
+          <p className="empty-state-description">
+            {statusFilter === 'all' 
+              ? 'Chưa có lịch hẹn nào trong hệ thống. Hãy tạo lịch hẹn mới.'
+              : `Không có lịch hẹn nào với trạng thái "${getStatusText(statusFilter)}"`}
+          </p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="table-container fade-in">
+          <table className="table">
+            <thead>
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bệnh nhân</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bác sĩ</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dịch vụ</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày giờ</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
+                <th>ID</th>
+                <th>Bệnh nhân</th>
+                <th>Bác sĩ</th>
+                <th>Dịch vụ</th>
+                <th>Ngày giờ</th>
+                <th>Trạng thái</th>
+                <th>Thao tác</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {appointments.map((apt) => (
-                <tr key={apt.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{apt.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {apt.patient_name || 'N/A'}
+            <tbody>
+              {(searchTerm ? filteredAppointments : appointments).map((apt, index) => (
+                <tr key={apt.id} className="slide-in" style={{ animationDelay: `${index * 50}ms` }}>
+                  <td className="font-semibold">#{apt.id}</td>
+                  <td>
+                    <div className="font-medium text-neutral-dark">{apt.patient_name || 'N/A'}</div>
+                    {apt.patient_phone && (
+                      <div className="text-xs text-neutral-medium">{apt.patient_phone}</div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {apt.doctor_name || 'N/A'}
+                  <td>
+                    <div className="font-medium text-neutral-dark">{apt.doctor_name || 'N/A'}</div>
+                    {apt.doctor_speciality && (
+                      <div className="text-xs text-neutral-medium">{apt.doctor_speciality}</div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {apt.service_name || 'N/A'}
+                  <td>
+                    <div className="font-medium text-neutral-dark">{apt.service_name || 'N/A'}</div>
+                    {apt.service_price && (
+                      <div className="text-xs text-neutral-medium">
+                        {apt.service_price.toLocaleString('vi-VN')} VNĐ
+                      </div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {format(new Date(apt.appointmentDate), 'dd/MM/yyyy')} lúc {format(new Date(apt.appointmentDate), 'HH:mm')}
+                  <td>
+                    {apt.appointmentDate 
+                      ? (
+                        <div>
+                          <div className="font-medium">{format(new Date(apt.appointmentDate), 'dd/MM/yyyy')}</div>
+                          <div className="text-xs text-neutral-medium">
+                            {apt.startTime ? `${apt.startTime} - ${apt.endTime || ''}` : format(new Date(apt.appointmentDate), 'HH:mm')}
+                          </div>
+                        </div>
+                      )
+                      : 'N/A'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(apt.status)}`}>
+                  <td>
+                    <span className={`badge badge-${getStatusColor(apt.status)}`}>
                       {getStatusText(apt.status)}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button
-                      onClick={() => setSelectedAppointment(apt)}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      Chi tiết
-                    </button>
-                    {apt.status === 'pending' && (
+                  <td>
+                    <div className="flex gap-2 flex-wrap">
                       <button
-                        onClick={() => handleConfirm(apt.id!)}
-                        className="text-green-600 hover:text-green-900"
+                        onClick={() => setSelectedAppointment(apt)}
+                        className="btn btn-ghost btn-sm"
+                        title="Xem chi tiết"
                       >
-                        Xác nhận
+                        Chi tiết
                       </button>
-                    )}
-                    {apt.status === 'confirmed' && (
-                      <button
-                        onClick={() => handleCheckIn(apt.id!)}
-                        className="text-purple-600 hover:text-purple-900"
-                      >
-                        Check-in
-                      </button>
-                    )}
-                    {['pending', 'confirmed'].includes(apt.status) && (
-                      <button
-                        onClick={() => handleCancel(apt.id!)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Hủy
-                      </button>
-                    )}
+                      {apt.status === 'pending' && (
+                        <button
+                          onClick={() => handleConfirm(apt.id!)}
+                          className="btn btn-secondary btn-sm"
+                          title="Xác nhận lịch hẹn"
+                        >
+                          Xác nhận
+                        </button>
+                      )}
+                      {apt.status === 'confirmed' && (
+                        <button
+                          onClick={() => handleCheckIn(apt.id!)}
+                          className="btn btn-primary btn-sm"
+                          title="Check-in bệnh nhân"
+                        >
+                          Check-in
+                        </button>
+                      )}
+                      {['pending', 'confirmed'].includes(apt.status) && (
+                        <button
+                          onClick={() => handleCancel(apt.id!)}
+                          className="btn btn-outline btn-sm"
+                          style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)' }}
+                          title="Hủy lịch hẹn"
+                        >
+                          Hủy
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

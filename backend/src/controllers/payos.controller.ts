@@ -82,24 +82,49 @@ export const createLink = async (req: AuthRequest, res: Response) => {
 
   const orderCode = generateOrderCode(appointmentId);
 
-  const { payUrl, data } = await createPaymentLink({
-    orderCode,
-    amount: Math.round(paymentAmount),
-    description: description || `Thanh toán lịch hẹn #${appointmentId}`,
-  });
+  let payUrl: string;
+  let payOSData: any;
+  
+  try {
+    const result = await createPaymentLink({
+      orderCode,
+      amount: Math.round(paymentAmount),
+      description: description || `Thanh toán lịch hẹn #${appointmentId}`,
+    });
+    payUrl = result.payUrl;
+    // result.data is the full response from PayOS API
+    payOSData = result.data;
+  } catch (error: any) {
+    console.error('Error creating PayOS link:', error);
+    throw new AppError(
+      error.message || 'Không thể tạo link thanh toán PayOS. Vui lòng kiểm tra cấu hình PayOS trong file .env',
+      500
+    );
+  }
 
   // Lưu payment ở trạng thái pending theo hình thức bank_transfer (PayOS)
-  await PaymentModel.create({
-    appointmentId,
-    amount: paymentAmount,
-    paymentMethod: 'bank_transfer',
-    status: 'pending',
-    transactionId: null as any, // sẽ cập nhật transactionId thực nhận từ webhook
-    orderCode: String(orderCode),
-    gateway: 'payos',
-    meta: { createResponse: data },
-    notes: 'PayOS pending',
-  });
+  try {
+    await PaymentModel.create({
+      appointmentId,
+      amount: paymentAmount,
+      paymentMethod: 'bank_transfer',
+      status: 'pending',
+      transactionId: null as any, // sẽ cập nhật transactionId thực nhận từ webhook
+      orderCode: String(orderCode),
+      gateway: 'payos',
+      meta: { createResponse: payOSData },
+      notes: 'PayOS pending',
+    });
+  } catch (error: any) {
+    console.error('Error creating payment record:', error);
+    // Nếu lỗi do thiếu columns (order_code, gateway, meta), vẫn trả về payUrl
+    // nhưng log warning
+    if (error.code === 'ER_BAD_FIELD_ERROR' || error.message?.includes('Unknown column')) {
+      console.warn('⚠️  Payment table chưa có columns order_code/gateway/meta. Vui lòng chạy migration.');
+    } else {
+      throw new AppError('Không thể lưu thông tin thanh toán: ' + (error.message || 'Lỗi không xác định'), 500);
+    }
+  }
 
   res.status(201).json({
     success: true,
@@ -107,7 +132,7 @@ export const createLink = async (req: AuthRequest, res: Response) => {
     data: {
       payUrl,
       orderCode,
-      gatewayResponse: data,
+      gatewayResponse: payOSData || {},
     },
   });
 };

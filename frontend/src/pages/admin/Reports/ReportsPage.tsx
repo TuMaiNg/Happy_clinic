@@ -222,6 +222,9 @@ export const ReportsPage: React.FC = () => {
         <button className={`tab ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => setActiveTab('appointments')}>Lịch hẹn</button>
         <button className={`tab ${activeTab === 'revenue' ? 'active' : ''}`} onClick={() => setActiveTab('revenue')}>Doanh thu</button>
         <button className={`tab ${activeTab === 'doctors' ? 'active' : ''}`} onClick={() => setActiveTab('doctors')}>Hiệu suất bác sĩ</button>
+        <a href="/admin/reports/daily" className="tab">
+          Báo cáo ngày
+        </a>
       </div>
 
       {loading ? (

@@ -12,6 +12,8 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m
 const PatientDashboard = lazy(() => import('./pages/PatientDashboard').then(m => ({ default: m.PatientDashboard })));
 const BookingWizard = lazy(() => import('./components/features/appointments/BookingWizard').then(m => ({ default: m.BookingWizard })));
 const Appointments = lazy(() => import('./pages/Appointments').then(m => ({ default: m.Appointments })));
+const MedicalHistory = lazy(() => import('./pages/MedicalHistory').then(m => ({ default: m.MedicalHistory })));
+const FavoriteDoctors = lazy(() => import('./pages/FavoriteDoctors').then(m => ({ default: m.FavoriteDoctors })));
 const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess').then(m => ({ default: m.PaymentSuccess })));
 const PaymentCancel = lazy(() => import('./pages/PaymentCancel').then(m => ({ default: m.PaymentCancel })));
 const AdminLayout = lazy(() => import('./pages/admin/Layout/AdminLayout').then(m => ({ default: m.AdminLayout })));
@@ -22,6 +24,7 @@ const DoctorList = lazy(() => import('./pages/admin/Doctors/DoctorList').then(m 
 const ServiceList = lazy(() => import('./pages/admin/Services/ServiceList').then(m => ({ default: m.ServiceList })));
 const PaymentList = lazy(() => import('./pages/admin/Payments/PaymentList').then(m => ({ default: m.PaymentList })));
 const ReportsPage = lazy(() => import('./pages/admin/Reports/ReportsPage').then(m => ({ default: m.ReportsPage })));
+const DailyReport = lazy(() => import('./pages/admin/Reports/DailyReport').then(m => ({ default: m.DailyReport })));
 const SettingsPage = lazy(() => import('./pages/admin/Settings/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const DoctorDashboard = lazy(() => import('./pages/doctor/DoctorDashboard').then(m => ({ default: m.DoctorDashboard })));
 const StaffDashboard = lazy(() => import('./pages/staff/StaffDashboard').then(m => ({ default: m.StaffDashboard })));
@@ -89,6 +92,22 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/medical-history"
+                element={
+                  <ProtectedRoute allowedRoles={['patient']}>
+                    <MedicalHistory />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/favorite-doctors"
+                element={
+                  <ProtectedRoute allowedRoles={['patient']}>
+                    <FavoriteDoctors />
+                  </ProtectedRoute>
+                }
+              />
               {/* Admin Routes */}
               <Route
                 path="/admin"
@@ -105,6 +124,7 @@ function App() {
                 <Route path="services" element={<ServiceList />} />
                 <Route path="payments" element={<PaymentList />} />
                 <Route path="reports" element={<ReportsPage />} />
+                <Route path="reports/daily" element={<DailyReport />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
               {/* Doctor Routes */}

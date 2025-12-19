@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { UserCircleIcon } from '@heroicons/react/24/outline';
+import { UserCircleIcon, BellIcon } from '@heroicons/react/24/outline';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { NotificationCenter } from '../../components/features/notifications/NotificationCenter';
 import './header.css';
 
 export const StaffHeader: React.FC = () => {
@@ -43,6 +44,7 @@ export const StaffHeader: React.FC = () => {
       </div>
 
       <div className="staff-header-right">
+        <NotificationCenter />
         <div className="staff-user-menu-wrapper" ref={menuRef}>
           <button
             className="staff-user-menu-btn"

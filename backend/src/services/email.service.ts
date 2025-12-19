@@ -168,6 +168,65 @@ class EmailService {
     await this.sendEmail(appointment.patientEmail || appointment.email, 'Lịch hẹn đã bị hủy - Happy Care Clinic', html);
   }
 
+  async sendAppointmentRescheduled(appointment: {
+    patientName: string;
+    doctorName: string;
+    serviceName: string;
+    oldDateTime: string;
+    newDateTime: string;
+    reason?: string;
+    patientEmail: string;
+  }) {
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #3B82F6, #8B5CF6); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0;">🔄 Lịch hẹn đã được đổi</h1>
+        </div>
+        <div style="background: #FFFFFF; padding: 30px; border: 1px solid #E2E8F0;">
+          <p>Xin chào <strong>${appointment.patientName}</strong>,</p>
+          <p>Lịch hẹn của bạn đã được đổi thành công. Vui lòng kiểm tra thông tin mới dưới đây:</p>
+          <div style="background: #F0F9FF; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3B82F6;">
+            <h3 style="margin-top: 0; color: #1E40AF;">Thông tin cũ</h3>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0;">
+              <span>Ngày giờ:</span>
+              <strong>${appointment.oldDateTime}</strong>
+            </div>
+          </div>
+          <div style="background: #F0FDF4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #22c55e;">
+            <h3 style="margin-top: 0; color: #166534;">Thông tin mới</h3>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #E2E8F0;">
+              <span>Bác sĩ:</span>
+              <strong>${appointment.doctorName}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #E2E8F0;">
+              <span>Dịch vụ:</span>
+              <span>${appointment.serviceName}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: none;">
+              <span>Ngày giờ mới:</span>
+              <strong style="color: #166534;">${appointment.newDateTime}</strong>
+            </div>
+            ${appointment.reason ? `<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #E2E8F0;">
+              <span><strong>Lý do đổi lịch:</strong> ${appointment.reason}</span>
+            </div>` : ''}
+          </div>
+          <p><strong>Lưu ý quan trọng:</strong></p>
+          <ul>
+            <li>Lịch hẹn mới sẽ cần được xác nhận lại bởi nhân viên</li>
+            <li>Bạn sẽ nhận được email xác nhận sau khi nhân viên xác nhận</li>
+            <li>Vui lòng đến đúng giờ hẹn mới</li>
+          </ul>
+        </div>
+        <div style="text-align: center; padding: 20px; color: #8B95A5; font-size: 14px;">
+          <p><strong>Happy Care Clinic</strong></p>
+          <p>123 Nguyễn Huệ, Quận 1, TP.HCM</p>
+          <p>Hotline: 028 3334 4444</p>
+        </div>
+      </div>
+    `;
+    await this.sendEmail(appointment.patientEmail, 'Lịch hẹn đã được đổi - Happy Care Clinic', html);
+  }
+
   async sendBookingReceived(booking: { to: string; patientName: string; appointmentId: number; message: string }) {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -224,6 +283,38 @@ class EmailService {
       </div>
     `;
     await this.sendEmail(email, 'Chào mừng đến với Happy Care Clinic', html);
+  }
+
+  async sendDoctorAcceptedEmail(data: {
+    to: string;
+    patientName: string;
+    doctorName: string;
+    doctorSpeciality: string;
+  }) {
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #0066CC, #00A86B); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0;">Bác sĩ đã chấp nhận bạn!</h1>
+        </div>
+        <div style="background: #FFFFFF; padding: 30px; border: 1px solid #E2E8F0;">
+          <p>Xin chào <strong>${data.patientName}</strong>,</p>
+          <p>Chúng tôi vui mừng thông báo rằng <strong>${data.doctorName}</strong> (${data.doctorSpeciality}) đã chấp nhận bạn làm bệnh nhân của mình.</p>
+          <p style="margin-top: 20px;">Bây giờ bạn có thể:</p>
+          <ul>
+            <li>Đặt lịch khám với bác sĩ ${data.doctorName}</li>
+            <li>Xem thông tin chi tiết về bác sĩ</li>
+            <li>Nhận thông báo về lịch hẹn</li>
+          </ul>
+          <p style="margin-top: 20px;">Chúc bạn có trải nghiệm tốt với dịch vụ của chúng tôi!</p>
+        </div>
+        <div style="text-align: center; padding: 20px; color: #8B95A5; font-size: 14px;">
+          <p><strong>Happy Care Clinic</strong></p>
+          <p>123 Nguyễn Huệ, Quận 1, TP.HCM</p>
+          <p>Hotline: 028 3334 4444</p>
+        </div>
+      </div>
+    `;
+    await this.sendEmail(data.to, 'Bác sĩ đã chấp nhận bạn - Happy Care Clinic', html);
   }
 }
 

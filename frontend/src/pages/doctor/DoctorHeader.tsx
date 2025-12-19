@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { NotificationCenter } from '../../components/features/notifications/NotificationCenter';
 import './header.css';
 
 export const DoctorHeader: React.FC = () => {
@@ -43,6 +44,7 @@ export const DoctorHeader: React.FC = () => {
       </div>
 
       <div className="header-right">
+        <NotificationCenter />
         <div className="user-menu-wrapper" ref={menuRef}>
           <button
             className="user-menu-btn"

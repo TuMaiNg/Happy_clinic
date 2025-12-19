@@ -24,6 +24,8 @@ import insuranceRoutes from './routes/insurance.routes';
 import otpRoutes from './routes/otp.routes';
 import authGoogleRoutes from './routes/auth-google.routes';
 import payosRoutes from './routes/payos.routes';
+import favoriteDoctorRoutes from './routes/favorite-doctor.routes';
+import doctorPatientRoutes from './routes/doctor-patient.routes';
 import { setupSocketIO } from './services/socket.service';
 import './jobs/reminder.job';
 import './jobs/schedule-generator.job';
@@ -64,8 +66,12 @@ app.use(cors({
         callback(new Error('Not allowed by CORS'));
       }
     } else {
-      // In development, allow all origins
-      callback(null, true);
+      // In development, allow all localhost origins (3000, 3001, etc.)
+      if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Still allow all in dev for flexibility
+      }
     }
   },
   credentials: true,
@@ -114,6 +120,8 @@ app.use('/api/schedules', scheduleRoutes);
 app.use('/api/time-slots', timeslotRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/payments/payos', payosRoutes);
+app.use('/api/favorite-doctors', favoriteDoctorRoutes);
+app.use('/api/doctor-patients', doctorPatientRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/config', configRoutes);

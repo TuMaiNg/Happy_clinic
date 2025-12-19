@@ -102,6 +102,7 @@ export class PaymentModel {
 
   static async findAll(filters?: {
     patientId?: number;
+    appointmentId?: number;
     status?: PaymentStatus;
     fromDate?: Date;
     toDate?: Date;
@@ -119,6 +120,11 @@ export class PaymentModel {
     if (filters?.patientId) {
       query += ' AND a.patient_id = ?';
       values.push(filters.patientId);
+    }
+
+    if (filters?.appointmentId) {
+      query += ' AND p.appointment_id = ?';
+      values.push(filters.appointmentId);
     }
 
     if (filters?.status) {

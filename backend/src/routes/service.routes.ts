@@ -19,7 +19,7 @@ router.get('/', cacheMiddleware({ ttl: 300 }), asyncHandler(async (req, res) => 
 
 // Public: Get service by ID (cached for 5 minutes)
 router.get('/:id', cacheMiddleware({ ttl: 300 }), asyncHandler(async (req, res) => {
-  const service = await ServiceModel.findById(parseInt(req.params.id));
+  const service = await ServiceModel.findById(validateIntParam(req.params.id, 'serviceId'));
   if (!service) {
     throw new AppError('Không tìm thấy dịch vụ', 404);
   }

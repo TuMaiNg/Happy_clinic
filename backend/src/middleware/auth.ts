@@ -55,7 +55,7 @@ export const authenticate = async (
     if (error instanceof jwt.TokenExpiredError) {
       return next(new AppError('Token đã hết hạn', 401));
     }
-    next(error);
+    return next(error);
   }
 };
 

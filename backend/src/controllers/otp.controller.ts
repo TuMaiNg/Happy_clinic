@@ -10,11 +10,10 @@ import pool from '../config/database';
  * POST /api/appointments/:id/verify-otp
  * Verify OTP and confirm appointment
  */
+import { validateIntParam } from '../utils/validation';
+
 export const verifyOTP = async (req: AuthRequest, res: Response): Promise<void> => {
-  const appointmentId = parseInt(req.params.id);
-  if (isNaN(appointmentId) || appointmentId <= 0) {
-    throw new AppError('ID lịch hẹn không hợp lệ', 400);
-  }
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
   const { otp } = req.body;
 
   if (!otp || otp.length !== 6) {
@@ -80,10 +79,7 @@ export const verifyOTP = async (req: AuthRequest, res: Response): Promise<void> 
  * Resend OTP code
  */
 export const resendOTP = async (req: AuthRequest, res: Response): Promise<void> => {
-  const appointmentId = parseInt(req.params.id);
-  if (isNaN(appointmentId) || appointmentId <= 0) {
-    throw new AppError('ID lịch hẹn không hợp lệ', 400);
-  }
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
 
   // Get appointment and patient info
   const [rows] = await pool.query(
@@ -129,10 +125,7 @@ export const resendOTP = async (req: AuthRequest, res: Response): Promise<void> 
  * Get OTP verification status
  */
 export const getOTPStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-  const appointmentId = parseInt(req.params.id);
-  if (isNaN(appointmentId) || appointmentId <= 0) {
-    throw new AppError('ID lịch hẹn không hợp lệ', 400);
-  }
+  const appointmentId = validateIntParam(req.params.id, 'appointmentId');
 
   const appointment = await AppointmentModel.findById(appointmentId);
   if (!appointment) {
