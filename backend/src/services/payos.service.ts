@@ -77,6 +77,11 @@ export function verifyWebhookSignature(rawBody: Buffer | string, signature?: str
 }
 
 export async function createPaymentLink(params: CreatePaymentParams): Promise<CreatePaymentResult> {
+  // Validate PayOS configuration
+  if (!config.payos.clientId || !config.payos.apiKey || !config.payos.checksumKey) {
+    throw new Error('PayOS chưa được cấu hình. Vui lòng thêm PAYOS_CLIENT_ID, PAYOS_API_KEY và PAYOS_CHECKSUM_KEY vào file .env');
+  }
+
   // Normalize base URL to always include protocol and no trailing slash
   const rawBaseUrl = config.payos.baseUrl || 'https://api.payos.vn';
   const baseUrl = (/^https?:\/\//i.test(rawBaseUrl) ? rawBaseUrl : `https://${rawBaseUrl}`).replace(/\/+$/,'');
@@ -120,13 +125,33 @@ export async function createPaymentLink(params: CreatePaymentParams): Promise<Cr
 
     return { payUrl, data: res.data };
   } catch (err: any) {
-    // Surface clearer error to client, typical when DNS/Network fails
-    // Log the detailed error from PayOS
-    console.error('PayOS API Error:', JSON.stringify(err?.response?.data, null, 2));
+    // Log detailed error for debugging
+    console.error('PayOS API Error Details:', {
+      code: err?.code,
+      message: err?.message,
+      response: err?.response?.data,
+      url: url,
+      baseUrl: baseUrl,
+    });
 
-    const msg = err?.code === 'ENOTFOUND' || /ENOTFOUND/i.test(String(err?.message))
-      ? 'Không thể kết nối tới PayOS (lỗi DNS). Vui lòng kiểm tra mạng/DNS hoặc PAYOS_BASE_URL.'
-      : (err?.response?.data?.message || err?.message || 'Lỗi gọi API PayOS');
+    // Handle different error types
+    let msg = 'Lỗi gọi API PayOS';
+    
+    if (err?.code === 'ENOTFOUND' || /ENOTFOUND/i.test(String(err?.message))) {
+      msg = `Không thể kết nối tới PayOS (lỗi DNS). Đang thử kết nối tới: ${baseUrl}. Vui lòng kiểm tra:
+- Kết nối mạng của bạn
+- PAYOS_BASE_URL trong file .env (hiện tại: ${config.payos.baseUrl || 'https://api.payos.vn'})
+- Firewall/Proxy có chặn kết nối không`;
+    } else if (err?.code === 'ECONNREFUSED' || /ECONNREFUSED/i.test(String(err?.message))) {
+      msg = `Không thể kết nối tới PayOS (kết nối bị từ chối). Kiểm tra PAYOS_BASE_URL: ${config.payos.baseUrl || 'https://api.payos.vn'}`;
+    } else if (err?.response?.status === 401 || err?.response?.status === 403) {
+      msg = 'Xác thực PayOS thất bại. Vui lòng kiểm tra PAYOS_CLIENT_ID và PAYOS_API_KEY trong file .env';
+    } else if (err?.response?.data?.message) {
+      msg = `PayOS: ${err.response.data.message}`;
+    } else if (err?.message) {
+      msg = err.message;
+    }
+    
     throw new Error(msg);
   }
 }

@@ -210,7 +210,7 @@ export const BookAppointment: React.FC = () => {
                           : 'bg-white text-gray-700 border-gray-300 hover:border-primary-500'
                       }`}
                     >
-                      {slot.startTime} - {slot.endTime}
+                      {slot.startTime?.substring(0, 5) || slot.startTime} - {slot.endTime?.substring(0, 5) || slot.endTime}
                     </button>
                   ))}
                 </div>

@@ -71,10 +71,16 @@ api.interceptors.response.use(
           }
         }
       } catch (refreshError) {
-        // Refresh failed, logout user
+        // Refresh failed
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
+        
+        // Không redirect nếu đang ở trang payment (PayOS redirect về)
+        const isPaymentPage = window.location.pathname.startsWith('/payment/');
+        if (!isPaymentPage) {
+          window.location.href = '/login';
+        }
+        
         return Promise.reject(refreshError);
       }
     }

@@ -39,8 +39,13 @@ export const PaymentCancel: React.FC = () => {
           try {
             const res = await paymentService.cancelPayOS(orderCode);
             setStatus(res.data.status);
-          } catch (err) {
-            console.error('Cancel PayOS mark failed error', err);
+          } catch (err: any) {
+            // Nếu lỗi authentication, vẫn hiển thị cancelled
+            if (err?.response?.status === 401 || err?.response?.status === 403) {
+              setError('Phiên đăng nhập đã hết hạn. Giao dịch đã được hủy.');
+            } else {
+              console.error('Cancel PayOS mark failed error', err);
+            }
             setStatus('failed');
           } finally {
             setLoading(false);
@@ -62,9 +67,14 @@ export const PaymentCancel: React.FC = () => {
         const res = await paymentService.getPayOSStatus(orderCode);
         setStatus(res.data.status);
       } catch (err: any) {
-        // Thân thiện hơn: không hiển thị lỗi raw 500
-        console.error('Check PayOS status failed', err);
-        setError('Không thể kiểm tra trạng thái thanh toán lúc này. Giao dịch có thể đã bị hủy.');
+        // Xử lý lỗi authentication - không redirect, chỉ hiển thị thông báo
+        if (err?.response?.status === 401 || err?.response?.status === 403) {
+          setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để xem chi tiết.');
+        } else {
+          // Thân thiện hơn: không hiển thị lỗi raw 500
+          console.error('Check PayOS status failed', err);
+          setError('Không thể kiểm tra trạng thái thanh toán lúc này. Giao dịch có thể đã bị hủy.');
+        }
       } finally {
         setLoading(false);
       }
@@ -85,7 +95,25 @@ export const PaymentCancel: React.FC = () => {
 
           {error && (
             <div className="mb-4 rounded-md bg-red-50 p-4 text-red-700">
-              {error}
+              <p className="font-semibold mb-2">{error}</p>
+              {(error.includes('Phiên đăng nhập') || error.includes('401') || error.includes('403')) && (
+                <div className="mt-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/login', { state: { returnTo: `/payment/cancel?orderCode=${orderCode}` } })}
+                    className="px-4 py-2 rounded-md bg-primary-600 text-white hover:bg-primary-700 font-medium text-sm"
+                  >
+                    Đăng nhập lại
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard')}
+                    className="px-4 py-2 rounded-md border-2 border-gray-300 text-gray-700 hover:bg-gray-50 font-medium text-sm"
+                  >
+                    Về trang chủ
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -111,20 +139,27 @@ export const PaymentCancel: React.FC = () => {
                 </p>
               )}
 
-              <div className="pt-4 flex gap-3">
+              <div className="pt-6 flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
                   onClick={() => navigate('/appointments')}
-                  className="px-4 py-2 rounded-md bg-primary-600 text-white hover:bg-primary-700"
+                  className="px-6 py-3 rounded-md bg-primary-600 text-white hover:bg-primary-700 font-medium text-base flex-1"
                 >
-                  Về danh sách lịch hẹn
+                  Xem danh sách lịch hẹn
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate('/dashboard')}
-                  className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="px-6 py-3 rounded-md border-2 border-gray-300 text-gray-700 hover:bg-gray-50 font-medium text-base flex-1"
                 >
                   Về trang chủ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/book-appointment')}
+                  className="px-6 py-3 rounded-md border-2 border-primary-300 text-primary-700 hover:bg-primary-50 font-medium text-base flex-1"
+                >
+                  Đặt lịch mới
                 </button>
               </div>
             </>

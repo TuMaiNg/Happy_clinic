@@ -317,7 +317,7 @@ export const CreateAppointmentModal: React.FC<CreateAppointmentModalProps> = ({
                   .filter(slot => slot.patientCount < slot.capacity)
                   .map((slot) => (
                     <option key={slot.id} value={slot.id}>
-                      {slot.startTime} - {slot.endTime} (Còn {slot.capacity - slot.patientCount}/{slot.capacity} chỗ)
+                      {slot.startTime?.substring(0, 5) || slot.startTime} - {slot.endTime?.substring(0, 5) || slot.endTime} (Còn {slot.capacity - slot.patientCount}/{slot.capacity} chỗ)
                     </option>
                   ))}
               </select>

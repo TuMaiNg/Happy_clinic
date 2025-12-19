@@ -68,13 +68,30 @@ export const Header: React.FC = () => {
                 className="flex items-center gap-2 p-2 rounded-lg hover:bg-neutral-light transition-colors"
               >
                 <UserCircleIcon className="w-6 h-6 text-neutral-medium" />
-                <span className="hidden sm:block text-sm font-medium text-neutral-dark">
-                  {user?.email}
-                </span>
+                <div className="hidden sm:block text-left">
+                  <span className="block text-sm font-medium text-neutral-dark">
+                    {user?.email}
+                  </span>
+                  <span className="block text-xs text-neutral-medium capitalize">
+                    {user?.role === 'patient' ? 'Bệnh nhân' : 
+                     user?.role === 'doctor' ? 'Bác sĩ' :
+                     user?.role === 'staff' ? 'Nhân viên' :
+                     user?.role === 'admin' ? 'Quản trị viên' : user?.role}
+                  </span>
+                </div>
               </button>
 
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-large border border-neutral-border py-2 z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-large border border-neutral-border py-2 z-50">
+                  <div className="px-4 py-2 border-b border-neutral-border">
+                    <p className="text-sm font-semibold text-neutral-dark">{user?.email}</p>
+                    <p className="text-xs text-neutral-medium capitalize mt-1">
+                      Vai trò: {user?.role === 'patient' ? 'Bệnh nhân' : 
+                                user?.role === 'doctor' ? 'Bác sĩ' :
+                                user?.role === 'staff' ? 'Nhân viên' :
+                                user?.role === 'admin' ? 'Quản trị viên' : user?.role}
+                    </p>
+                  </div>
                   <Link
                     to="/profile"
                     className="block px-4 py-2 text-sm text-neutral-dark hover:bg-neutral-light"

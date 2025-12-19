@@ -5,12 +5,17 @@ import { AppointmentModel } from '../models/Appointment';
 import { ServiceModel } from '../models/Service';
 import { PaymentModel } from '../models/Payment';
 import { createPaymentLink, verifyWebhookSignature } from '../services/payos.service';
+import { config } from '../config/env';
 
 function generateOrderCode(appointmentId: number): number {
+  // Tạo orderCode unique: timestamp (8 chữ số cuối) + appointmentId (mod 1000 để 3 chữ số) + random (3 chữ số)
+  // PayOS yêu cầu orderCode là số nguyên dương và unique trong hệ thống
   const ts = String(Date.now());
-  const randomSuffix = String(Math.floor(Math.random() * 100)).padStart(2, '0'); 
-  const uniqueString = `${ts.substring(ts.length - 8)}${appointmentId % 1000}${randomSuffix}`;
-  return parseInt(uniqueString.substring(0, 15), 10); 
+  const randomSuffix = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+  const appointmentSuffix = String(appointmentId % 1000).padStart(3, '0');
+  const uniqueString = `${ts.substring(ts.length - 8)}${appointmentSuffix}${randomSuffix}`;
+  // Giới hạn 15 chữ số để đảm bảo không vượt quá giới hạn số nguyên lớn của JavaScript
+  return parseInt(uniqueString.substring(0, 15), 10);
 }
 
 export const createLink = async (req: AuthRequest, res: Response) => {
@@ -23,6 +28,18 @@ export const createLink = async (req: AuthRequest, res: Response) => {
   };
 
   if (!appointmentId) throw new AppError('Thiếu appointmentId', 400);
+
+  // Validate PayOS configuration before proceeding
+  if (!config.payos.clientId || !config.payos.apiKey || !config.payos.checksumKey) {
+    throw new AppError(
+      'PayOS chưa được cấu hình. Vui lòng thêm các biến môi trường sau vào file .env:\n' +
+      '- PAYOS_CLIENT_ID\n' +
+      '- PAYOS_API_KEY\n' +
+      '- PAYOS_CHECKSUM_KEY\n' +
+      '(Tùy chọn: PAYOS_BASE_URL, mặc định: https://api.payos.vn)',
+      500
+    );
+  }
 
   const appointment = await AppointmentModel.findById(appointmentId);
   if (!appointment) throw new AppError('Không tìm thấy lịch hẹn', 404);
@@ -41,6 +58,27 @@ export const createLink = async (req: AuthRequest, res: Response) => {
 
   const paymentAmount = amount || service.price;
   if (paymentAmount <= 0) throw new AppError('Số tiền không hợp lệ', 400);
+
+  // Kiểm tra xem đã có payment PayOS pending cho appointment này chưa
+  const existingPayments = await PaymentModel.findByAppointment(appointmentId);
+  const existingPayOSPending = existingPayments.find(
+    p => p.status === 'pending' && (p as any).gateway === 'payos'
+  );
+
+  if (existingPayOSPending) {
+    // Nếu đã có payment pending, có thể trả về link cũ hoặc từ chối
+    // Ở đây chúng ta sẽ từ chối để tránh duplicate
+    throw new AppError('Đã có một link thanh toán PayOS đang chờ xử lý cho lịch hẹn này. Vui lòng hoàn tất thanh toán hoặc hủy thanh toán cũ trước.', 409);
+  }
+
+  // Kiểm tra xem đã thanh toán đầy đủ chưa
+  const paidAmount = existingPayments
+    .filter(p => p.status === 'paid')
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  if (paidAmount >= service.price && !amount) {
+    throw new AppError('Lịch hẹn này đã được thanh toán đầy đủ', 400);
+  }
 
   const orderCode = generateOrderCode(appointmentId);
 
@@ -131,6 +169,7 @@ export const success = async (req: AuthRequest, res: Response) => {
     }
   }
 
+  // Chỉ update nếu payment vẫn còn pending (tránh race condition với webhook)
   if (payment.status === 'pending') {
     await PaymentModel.update(payment.id!, {
       status: 'paid',
@@ -139,6 +178,7 @@ export const success = async (req: AuthRequest, res: Response) => {
       notes: 'Marked paid by user success callback',
     });
   }
+  // Nếu đã paid (có thể webhook đã xử lý), không cần làm gì
 
   const refreshed = await PaymentModel.findById(payment.id!);
   res.json({ success: true, data: { orderCode, status: refreshed?.status || payment.status } });

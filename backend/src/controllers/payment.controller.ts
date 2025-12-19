@@ -52,11 +52,13 @@ export const createPayment = async (req: AuthRequest, res: Response) => {
   }
 
   // Create payment
+  // Tất cả payment đều bắt đầu với status 'pending'
+  // Status sẽ được cập nhật bởi payment gateway (webhook) hoặc staff (confirmPayment)
   const payment = await PaymentModel.create({
     appointmentId,
     amount: paymentAmount,
     paymentMethod,
-    status: paymentMethod === 'cash' ? 'pending' : 'pending', // In production, integrate with payment gateway
+    status: 'pending',
     notes: notes || null,
   });
 

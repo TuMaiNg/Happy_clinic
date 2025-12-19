@@ -33,7 +33,7 @@ export const AppointmentDetails: React.FC<AppointmentDetailsProps> = ({
             <div className="detail-item">
               <span className="detail-label">Giờ:</span>
               <span className="detail-value">
-                {appointment.startTime} - {appointment.endTime}
+                {appointment.startTime?.substring(0, 5) || appointment.startTime} - {appointment.endTime?.substring(0, 5) || appointment.endTime}
               </span>
             </div>
             <div className="detail-item">

@@ -149,7 +149,7 @@ export const AppointmentList: React.FC = () => {
                     {apt.service_name || 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {format(new Date(apt.appointmentDate), 'dd/MM/yyyy HH:mm')}
+                    {format(new Date(apt.appointmentDate), 'dd/MM/yyyy')} lúc {format(new Date(apt.appointmentDate), 'HH:mm')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(apt.status)}`}>

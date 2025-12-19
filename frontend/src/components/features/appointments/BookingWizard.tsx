@@ -67,10 +67,12 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
     }
   }, [debouncedSpecialtyFilter]);
 
-  const loadServices = useCallback(async () => {
+  const loadServices = useCallback(async (speciality?: string) => {
     try {
-
-      const response = await serviceService.getAll({ isActive: true });
+      const response = await serviceService.getAll({ 
+        isActive: true,
+        speciality: speciality || undefined
+      });
       setServices(response.data);
     } catch (err: any) {
       setError('Không thể tải danh sách dịch vụ');
@@ -105,8 +107,18 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
 
   useEffect(() => {
     loadDoctors();
+    // Load tất cả services ban đầu (chưa chọn doctor)
     loadServices();
   }, [loadDoctors, loadServices]);
+
+  // Khi chọn doctor, reload services theo specialty của doctor đó
+  useEffect(() => {
+    if (selectedDoctor?.speciality) {
+      loadServices(selectedDoctor.speciality);
+      // Reset selectedService khi chọn doctor mới (vì services đã thay đổi)
+      setSelectedService(null);
+    }
+  }, [selectedDoctor?.speciality, loadServices]);
 
   useEffect(() => {
     if (selectedDoctor && selectedDate) {
@@ -115,6 +127,20 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
       setAvailableSlots([]);
     }
   }, [selectedDoctor, selectedDate, selectedService, loadAvailableSlots]);
+
+  // Tự động chọn slot đầu tiên có sẵn khi load xong (giúp người già không cần click)
+  useEffect(() => {
+    if (availableSlots.length > 0 && !selectedSlot && selectedDate) {
+      // Tìm slot đầu tiên còn chỗ (không đầy)
+      const firstAvailableSlot = availableSlots.find(
+        slot => slot.capacity - slot.patientCount > 0
+      );
+      if (firstAvailableSlot) {
+        setSelectedSlot(firstAvailableSlot);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableSlots.length, selectedDate]); // Chỉ chạy khi số lượng slots hoặc selectedDate thay đổi
 
   const handleNext = () => {
     if (currentStep === 1 && !selectedDoctor) {
@@ -136,6 +162,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
   const handleBack = () => {
     setCurrentStep(currentStep - 1);
     setError('');
+    setLoading(false); // Đảm bảo loading state được reset khi quay lại
   };
 
   const handleSubmit = async () => {
@@ -146,6 +173,13 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
       if (!selectedSlot || !selectedDate) {
         setError('Vui lòng chọn ngày và giờ');
         setLoading(false);
+        return;
+      }
+
+      // Nếu đã có appointmentId (đã tạo appointment trước đó), chỉ cần mở payment dialog
+      if (appointmentId) {
+        setLoading(false);
+        setShowPaymentDialog(true);
         return;
       }
 
@@ -356,8 +390,35 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
           {currentStep === 2 && (
             <div>
               <h2 className="text-2xl font-semibold mb-6">Chọn dịch vụ</h2>
-              <div className="space-y-4">
-                {services.map((service) => (
+              {selectedDoctor && (
+                <p className="text-sm text-neutral-medium mb-4">
+                  Dịch vụ cho chuyên khoa: <span className="font-semibold text-primary-600">{selectedDoctor.speciality}</span>
+                </p>
+              )}
+              {services.length === 0 ? (
+                <div className="bg-yellow-50 rounded-xl p-8 text-center border-2 border-yellow-200">
+                  <svg className="w-16 h-16 text-yellow-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-yellow-800 font-medium text-lg mb-2">
+                    Không có dịch vụ nào cho chuyên khoa này
+                  </p>
+                  <p className="text-yellow-600 text-sm mb-4">
+                    Vui lòng chọn bác sĩ khác hoặc liên hệ quản trị viên để thêm dịch vụ
+                  </p>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setCurrentStep(1);
+                      setSelectedDoctor(null);
+                    }}
+                  >
+                    Quay lại chọn bác sĩ
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {services.map((service) => (
                   <Card
                     key={service.id}
                     hover
@@ -390,8 +451,9 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                       </div>
                     </div>
                   </Card>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -460,7 +522,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                           </p>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-96 overflow-y-auto pr-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto pr-2">
                           {availableSlots.map((slot) => {
                             const remaining = slot.capacity - slot.patientCount;
                             const isSelected = selectedSlot?.id === slot.id;
@@ -479,29 +541,29 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                                 }}
                                 disabled={isFull}
                                 className={`
-                                  p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center min-h-[100px]
+                                  p-5 rounded-xl border-3 transition-all duration-200 flex flex-col items-center justify-center min-h-[120px] text-lg
                                   ${isSelected
-                                    ? 'bg-primary-500 text-white border-primary-500 shadow-lg transform scale-105 ring-4 ring-primary-200'
+                                    ? 'bg-primary-500 text-white border-primary-600 shadow-xl transform scale-105 ring-4 ring-primary-200 font-semibold'
                                     : isFull
                                     ? 'bg-neutral-100 text-neutral-400 border-neutral-300 cursor-not-allowed opacity-60'
                                     : isLowCapacity
-                                    ? 'bg-yellow-50 text-yellow-800 border-yellow-300 hover:border-yellow-500 hover:shadow-md hover:scale-102'
-                                    : 'bg-white text-neutral-dark border-neutral-border hover:border-primary-500 hover:shadow-md hover:scale-102 active:scale-100'
+                                    ? 'bg-yellow-50 text-yellow-800 border-yellow-400 hover:border-yellow-600 hover:shadow-lg hover:scale-105 border-3'
+                                    : 'bg-white text-neutral-dark border-neutral-border hover:border-primary-500 hover:shadow-lg hover:scale-105 active:scale-100 border-2'
                                   }
                                 `}
                               >
-                                <div className={`text-xl font-bold mb-2 ${isSelected ? 'text-white' : isLowCapacity ? 'text-yellow-800' : 'text-primary-600'}`}>
+                                <div className={`text-2xl font-bold mb-2 ${isSelected ? 'text-white' : isLowCapacity ? 'text-yellow-800' : 'text-primary-600'}`}>
                                   {slot.startTime.substring(0, 5)}
                                 </div>
-                                <div className={`text-xs font-medium ${isSelected ? 'text-white opacity-90' : isLowCapacity ? 'text-yellow-700' : 'text-neutral-medium'}`}>
+                                <div className={`text-sm font-medium ${isSelected ? 'text-white opacity-90' : isLowCapacity ? 'text-yellow-700' : 'text-neutral-medium'}`}>
                                   {!isFull ? (
                                     <>
-                                      <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                                      <span className="inline-block w-3 h-3 rounded-full bg-green-500 mr-1"></span>
                                       Còn {remaining}/{slot.capacity} chỗ
                                     </>
                                   ) : (
                                     <>
-                                      <span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                                      <span className="inline-block w-3 h-3 rounded-full bg-red-500 mr-1"></span>
                                       Đã đầy
                                     </>
                                   )}
@@ -608,9 +670,11 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                       <p className="font-semibold text-lg text-secondary-500">
                         {selectedDate && format(new Date(selectedDate), 'dd/MM/yyyy')}
                       </p>
-                      <p className="font-semibold text-lg text-secondary-500">
-                        {selectedSlot?.startTime} - {selectedSlot?.endTime}
-                      </p>
+                      {selectedSlot && (
+                        <p className="font-semibold text-lg text-secondary-500">
+                          {selectedSlot.startTime?.substring(0, 5) || selectedSlot.startTime} - {selectedSlot.endTime?.substring(0, 5) || selectedSlot.endTime}
+                        </p>
+                      )}
                     </div>
 
                     <div className="pt-4 border-t border-neutral-border">
@@ -628,8 +692,9 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                       className="w-full"
                       onClick={handleSubmit}
                       isLoading={loading}
+                      disabled={loading}
                     >
-                      Xác nhận đặt lịch
+                      {appointmentId ? 'Tiếp tục thanh toán' : 'Xác nhận đặt lịch'}
                     </Button>
                   </div>
                 </Card>
@@ -651,59 +716,77 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
                 Tiếp theo →
               </Button>
             )}
-	      <Modal
-	        isOpen={showPaymentDialog}
-	        onClose={() => setShowPaymentDialog(false)}
-	        title="Chọn hình thức thanh toán"
-	        size="md"
-	      >
-	        <div className="space-y-4">
-	          <p className="text-neutral-medium">
-	            Số tiền dự kiến: <span className="font-semibold">{selectedService?.price?.toLocaleString('vi-VN')}₫</span>
-	          </p>
-	          <div className="grid grid-cols-1 gap-3">
-	            <Button
-	              variant="primary"
-	              onClick={async () => {
-	                if (!appointmentId || !selectedService?.price) return;
-	                try {
-	                  setCreatingPayLink(true);
-	                  const res = await paymentService.createPayOSLink(
-	                    appointmentId,
-	                    selectedService.price,
-	                    `Thanh toán lịch hẹn #${appointmentId}`
-	                  );
-	                  try { sessionStorage.setItem('payos_order_code', res.data.orderCode); } catch {}
-	                  window.location.href = res.data.payUrl;
-	                } catch (err: any) {
-	                  setError(err?.response?.data?.message || err?.message || 'Không thể tạo link thanh toán. Vui lòng thử lại.');
-	                  setShowPaymentDialog(false);
-	                } finally {
-	                  setCreatingPayLink(false);
-	                }
-	              }}
-	              isLoading={creatingPayLink}
-	            >
-	              Thanh toán ngay (PayOS)
-	            </Button>
-
-	            <Button
-	              variant="outline"
-	              onClick={() => {
-	                setShowPaymentDialog(false);
-	                setShowSuccessModal(true);
-	              }}
-	            >
-	              Thanh toán sau khi điều trị
-	            </Button>
-	          </div>
-	        </div>
-	      </Modal>
-
-            )
           </div>
         </div>
       </div>
+
+      {/* Payment Dialog Modal */}
+      <Modal
+        isOpen={showPaymentDialog}
+        onClose={() => setShowPaymentDialog(false)}
+        title="Chọn hình thức thanh toán"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-neutral-medium">
+            Số tiền dự kiến: <span className="font-semibold">{selectedService?.price?.toLocaleString('vi-VN')}₫</span>
+          </p>
+          <p className="text-sm text-neutral-medium">
+            Lịch hẹn đã được tạo thành công. Bạn có thể thanh toán ngay hoặc thanh toán sau.
+          </p>
+          <div className="grid grid-cols-1 gap-3">
+            <Button
+              variant="primary"
+              onClick={async () => {
+                if (!appointmentId || !selectedService?.price) return;
+                try {
+                  setCreatingPayLink(true);
+                  const res = await paymentService.createPayOSLink(
+                    appointmentId,
+                    selectedService.price,
+                    `Thanh toán lịch hẹn #${appointmentId}`
+                  );
+                  try { sessionStorage.setItem('payos_order_code', res.data.orderCode); } catch {}
+                  window.location.href = res.data.payUrl;
+                } catch (err: any) {
+                  setError(err?.response?.data?.message || err?.message || 'Không thể tạo link thanh toán. Vui lòng thử lại.');
+                  setShowPaymentDialog(false);
+                } finally {
+                  setCreatingPayLink(false);
+                }
+              }}
+              isLoading={creatingPayLink}
+            >
+              Thanh toán ngay (PayOS/QR Code)
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPaymentDialog(false);
+                setShowSuccessModal(true);
+              }}
+            >
+              Thanh toán sau khi điều trị
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPaymentDialog(false);
+                // Quay lại trang xác nhận (step 4) để user có thể xem lại thông tin
+                // Không reset appointmentId để tránh tạo duplicate
+                setCurrentStep(4);
+                setError(''); // Clear any errors
+                setLoading(false); // Đảm bảo loading state được reset
+              }}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              ← Quay lại xem thông tin lịch hẹn
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Success Modal */}
       <Modal
@@ -730,7 +813,7 @@ export const BookingWizard: React.FC<BookingWizardProps> = ({ onComplete }) => {
               Ngày: {selectedDate && format(new Date(selectedDate), 'dd/MM/yyyy')}
             </p>
             <p className="text-sm text-neutral-medium">
-              Giờ: {selectedSlot?.startTime} - {selectedSlot?.endTime}
+              Giờ: {selectedSlot?.startTime?.substring(0, 5) || selectedSlot?.startTime} - {selectedSlot?.endTime?.substring(0, 5) || selectedSlot?.endTime}
             </p>
           </div>
           <div className="flex gap-4">

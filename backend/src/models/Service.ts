@@ -48,8 +48,15 @@ export class ServiceModel {
     const values: any[] = [];
 
     if (filters?.speciality) {
-      query += ' AND speciality = ?';
-      values.push(filters.speciality);
+      // Hiển thị cả services có specialty khớp VÀ services "General" (services chung cho tất cả bác sĩ)
+      // Nếu specialty đã là "General" thì chỉ cần filter theo "General"
+      if (filters.speciality === 'General') {
+        query += ' AND speciality = ?';
+        values.push('General');
+      } else {
+        query += ' AND (speciality = ? OR speciality = ?)';
+        values.push(filters.speciality, 'General');
+      }
     }
 
     if (filters?.isActive !== undefined) {

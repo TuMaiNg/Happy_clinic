@@ -150,7 +150,7 @@ export const PatientDashboard: React.FC = () => {
                       {apt.doctor_name || 'Bác sĩ'}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {format(new Date(apt.appointmentDate), 'dd/MM/yyyy HH:mm')}
+                      {format(new Date(apt.appointmentDate), 'dd/MM/yyyy')} lúc {format(new Date(apt.appointmentDate), 'HH:mm')}
                     </p>
                     <p className="text-sm text-gray-500">
                       {apt.service_name || 'Dịch vụ'}
