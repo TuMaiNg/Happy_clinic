@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { appointmentService } from '../services/appointment.service';
+import { paymentService, Payment } from '../services/payment.service';
+import { useToast } from '../contexts/ToastContext';
 
 import { Layout } from '../components/layout/Layout';
 import { AppointmentCard } from '../components/features/appointments/AppointmentCard';
@@ -14,6 +16,8 @@ export const Appointments: React.FC = () => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const { success: showSuccessToast, error: showErrorToast } = useToast();
+  const [paymentStatusMap, setPaymentStatusMap] = useState<Record<number, 'paid' | 'failed' | string>>({});
 
   const loadAppointments = useCallback(async () => {
     try {
@@ -21,7 +25,33 @@ export const Appointments: React.FC = () => {
       const response = await appointmentService.getAll({
         status: filter === 'all' ? undefined : filter,
       });
-      setAppointments(response.data);
+      const list = response.data || [];
+      setAppointments(list);
+
+      // Load payments to determine payment status per appointment (latest payment wins)
+      try {
+        const payRes = await paymentService.getAll();
+        const payments: Payment[] = payRes.data || [] as any;
+        const latestByApt = new Map<number, Payment>();
+        payments.forEach((p) => {
+          const aptId = (p as any).appointmentId ?? (p as any).appointment_id; // fallback
+          if (!aptId) return;
+          const current = latestByApt.get(aptId);
+          const curTime = current ? new Date(current.createdAt).getTime() : -1;
+          const newTime = p.createdAt ? new Date(p.createdAt).getTime() : Date.now();
+          if (!current || newTime >= curTime) {
+            latestByApt.set(aptId, p);
+          }
+        });
+        const map: Record<number, 'paid' | 'failed' | string> = {};
+        latestByApt.forEach((p, aptId) => {
+          map[aptId] = p.status as any;
+        });
+        setPaymentStatusMap(map);
+      } catch (e) {
+        console.warn('Load payments failed', e);
+        setPaymentStatusMap({});
+      }
     } catch (err: any) {
       console.error('Error loading appointments:', err);
     } finally {
@@ -32,6 +62,19 @@ export const Appointments: React.FC = () => {
   useEffect(() => {
     loadAppointments();
   }, [loadAppointments]);
+
+  const handleDelete = async (id: number) => {
+    const ok = window.confirm('Bạn có chắc muốn xóa lịch hẹn này? Hành động không thể hoàn tác.');
+    if (!ok) return;
+    try {
+      await appointmentService.delete(id);
+      showSuccessToast('Xóa lịch hẹn thành công');
+      await loadAppointments();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Xóa lịch hẹn thất bại';
+      showErrorToast(msg);
+    }
+  };
 
   const handleCancelClick = (appointment: any) => {
     setSelectedAppointment(appointment);
@@ -120,8 +163,10 @@ export const Appointments: React.FC = () => {
                 <AppointmentCard
                   key={apt.id}
                   appointment={apt}
+                  paymentStatus={paymentStatusMap[apt.id]}
                   onCancel={() => handleCancelClick(apt)}
                   onCheckIn={() => handleCheckIn(apt.id)}
+                  onDelete={() => handleDelete(apt.id)}
                 />
               ))}
             </div>

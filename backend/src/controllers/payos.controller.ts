@@ -111,6 +111,67 @@ export const status = async (req: AuthRequest, res: Response) => {
   });
 };
 
+// Mark success when user returned with gateway success but webhook hasn't updated yet
+export const success = async (req: AuthRequest, res: Response) => {
+  if (!req.user) throw new AppError('Không có quyền truy cập', 403);
+  const { orderCode, transactionId } = req.body as { orderCode?: string; transactionId?: string };
+  if (!orderCode) throw new AppError('Thiếu orderCode', 400);
+
+  let payment = await PaymentModel.findByOrderCode(orderCode);
+  if (!payment) payment = await PaymentModel.findByTransactionId(orderCode);
+  if (!payment) throw new AppError('Không tìm thấy thanh toán', 404);
+
+  // Authorization for patient
+  if (req.user.role === 'patient') {
+    const { PatientModel } = await import('../models/Patient');
+    const patient = await PatientModel.findByUserId(req.user.id);
+    const appointment = await AppointmentModel.findById(payment.appointmentId);
+    if (!patient || !appointment || patient.id !== appointment.patientId) {
+      throw new AppError('Không có quyền truy cập', 403);
+    }
+  }
+
+  if (payment.status === 'pending') {
+    await PaymentModel.update(payment.id!, {
+      status: 'paid',
+      paidAt: new Date(),
+      transactionId: transactionId || payment.transactionId,
+      notes: 'Marked paid by user success callback',
+    });
+  }
+
+  const refreshed = await PaymentModel.findById(payment.id!);
+  res.json({ success: true, data: { orderCode, status: refreshed?.status || payment.status } });
+};
+
+// User cancelled from gateway: mark as failed if still pending
+export const cancel = async (req: AuthRequest, res: Response) => {
+  if (!req.user) throw new AppError('Không có quyền truy cập', 403);
+  const { orderCode } = req.body as { orderCode?: string };
+  if (!orderCode) throw new AppError('Thiếu orderCode', 400);
+
+  let payment = await PaymentModel.findByOrderCode(orderCode);
+  if (!payment) payment = await PaymentModel.findByTransactionId(orderCode);
+  if (!payment) throw new AppError('Không tìm thấy thanh toán', 404);
+
+  // Kiểm tra quyền (nếu là patient)
+  if (req.user.role === 'patient') {
+    const { PatientModel } = await import('../models/Patient');
+    const patient = await PatientModel.findByUserId(req.user.id);
+    const appointment = await AppointmentModel.findById(payment.appointmentId);
+    if (!patient || !appointment || patient.id !== appointment.patientId) {
+      throw new AppError('Không có quyền truy cập', 403);
+    }
+  }
+
+  if (payment.status === 'pending') {
+    await PaymentModel.update(payment.id!, { status: 'failed', notes: 'User cancelled from PayOS' });
+  }
+
+  const refreshed = await PaymentModel.findById(payment.id!);
+  res.json({ success: true, data: { orderCode, status: refreshed?.status || payment.status } });
+};
+
 export const webhook = async (req: Request, res: Response) => {
   try {
     // req.body is Buffer when using express.raw()

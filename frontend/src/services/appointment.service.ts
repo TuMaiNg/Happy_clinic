@@ -125,5 +125,10 @@ export const appointmentService = {
     const response = await api.put(`/appointments/${id}/complete`, { notes });
     return response.data;
   },
+
+  async delete(id: number): Promise<{ success: boolean; message: string }> {
+    const response = await api.delete(`/appointments/${id}`);
+    return response.data;
+  },
 };
 

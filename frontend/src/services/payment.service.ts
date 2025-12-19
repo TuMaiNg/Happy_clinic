@@ -74,5 +74,15 @@ export const paymentService = {
     const response = await api.get('/payments/payos/status', { params: { orderCode } });
     return response.data;
   },
+
+  async cancelPayOS(orderCode: string): Promise<{ success: boolean; data: { orderCode: string; status: string } }> {
+    const response = await api.post('/payments/payos/cancel', { orderCode });
+    return response.data;
+  },
+
+  async successPayOS(orderCode: string, transactionId?: string): Promise<{ success: boolean; data: { orderCode: string; status: string } }> {
+    const response = await api.post('/payments/payos/success', { orderCode, transactionId });
+    return response.data;
+  },
 };
 

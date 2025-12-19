@@ -28,7 +28,7 @@ export class PaymentModel {
         payment.appointmentId,
         payment.amount,
         payment.paymentMethod,
-        payment.status || 'pending',
+        payment.status,
         payment.transactionId || null,
       ]
     ) as any;
@@ -218,6 +218,28 @@ export class PaymentModel {
   }
 
   private static mapRowToPayment(row: any): Payment {
+    // Safely parse meta which may be stored as JSON string, object, or invalid string like "[object Object]"
+    let parsedMeta: any = null;
+    const rawMeta = row.meta;
+    if (rawMeta !== undefined && rawMeta !== null) {
+      if (typeof rawMeta === 'object') {
+        parsedMeta = rawMeta;
+      } else if (typeof rawMeta === 'string') {
+        const trimmed = rawMeta.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            parsedMeta = JSON.parse(trimmed);
+          } catch {
+            // keep as raw string if JSON parsing fails
+            parsedMeta = trimmed;
+          }
+        } else {
+          // Not a JSON-looking string. Keep as-is to avoid crashing
+          parsedMeta = trimmed;
+        }
+      }
+    }
+
     return {
       id: row.id,
       appointmentId: row.appointment_id,
@@ -227,7 +249,7 @@ export class PaymentModel {
       transactionId: row.transaction_id,
       orderCode: row.order_code ?? null,
       gateway: row.gateway ?? null,
-      meta: row.meta ? JSON.parse(row.meta) : null,
+      meta: parsedMeta,
       paidAt: row.paid_at,
       notes: row.notes,
       createdAt: row.created_at,

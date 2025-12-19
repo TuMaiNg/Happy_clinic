@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Fragment } from 'react';
+import React, { useState, useEffect, Fragment, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doctorService } from '../services/doctor.service';
 import { serviceService } from '../services/service.service';
@@ -25,6 +25,24 @@ export const BookAppointment: React.FC = () => {
   const [createdAppointment, setCreatedAppointment] = useState<{ id: number; amount: number } | null>(null);
   const [creatingPayLink, setCreatingPayLink] = useState(false);
 
+  const loadAvailableSlots = useCallback(async () => {
+    if (!selectedDoctor || !selectedDate) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    try {
+      const response = await timeslotService.getAvailable({
+        doctorId: selectedDoctor,
+        date: selectedDate,
+        serviceId: selectedService || undefined,
+      });
+      setAvailableSlots(response.data);
+    } catch (err: any) {
+      setError('Không thể tải khung giờ trống');
+    }
+  }, [selectedDoctor, selectedDate, selectedService]);
+
 
   useEffect(() => {
     loadDoctors();
@@ -32,12 +50,8 @@ export const BookAppointment: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedDoctor && selectedDate) {
-      loadAvailableSlots();
-    } else {
-      setAvailableSlots([]);
-    }
-  }, [selectedDoctor, selectedDate, selectedService]);
+    loadAvailableSlots();
+  }, [loadAvailableSlots]);
 
   const loadDoctors = async () => {
     try {
@@ -57,20 +71,7 @@ export const BookAppointment: React.FC = () => {
     }
   };
 
-  const loadAvailableSlots = async () => {
-    if (!selectedDoctor || !selectedDate) return;
 
-    try {
-      const response = await timeslotService.getAvailable({
-        doctorId: selectedDoctor,
-        date: selectedDate,
-        serviceId: selectedService || undefined,
-      });
-      setAvailableSlots(response.data);
-    } catch (err: any) {
-      setError('Không thể tải khung giờ trống');
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -335,9 +336,23 @@ export const BookAppointment: React.FC = () => {
 
                         <button
                           type="button"
-                          onClick={() => {
-                            setPaymentDialogOpen(false);
-                            navigate('/appointments', { state: { message: 'Đặt lịch thành công. Bạn có thể thanh toán sau khi điều trị.' } });
+                          onClick={async () => {
+                            if (!createdAppointment) return;
+                            try {
+                              // Tạo bản ghi thanh toán trạng thái pending cho lựa chọn thanh toán sau khi điều trị
+                              await paymentService.create({
+                                appointmentId: createdAppointment.id,
+                                // Sau điều trị thường thanh toán tại quầy -> cash
+                                paymentMethod: 'cash',
+                                amount: createdAppointment.amount,
+                              });
+                            } catch (err) {
+                              // Không làm gián đoạn luồng đặt lịch nếu tạo thanh toán pending thất bại
+                              console.error('Create pending payment failed', err);
+                            } finally {
+                              setPaymentDialogOpen(false);
+                              navigate('/appointments', { state: { message: 'Đặt lịch thành công. Bạn có thể thanh toán sau khi điều trị.' } });
+                            }
                           }}
                           className="w-full inline-flex justify-center rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
                         >

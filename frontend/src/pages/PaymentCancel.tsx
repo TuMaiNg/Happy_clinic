@@ -33,8 +33,21 @@ export const PaymentCancel: React.FC = () => {
 
   useEffect(() => {
     const check = async () => {
-      // Nếu PayOS trả về hủy thì không cần gọi API để tránh lỗi 500
       if (isCancelledFromGateway) {
+        // Nếu user hủy từ gateway và có orderCode -> báo server đánh dấu failed nếu còn pending
+        if (orderCode) {
+          try {
+            const res = await paymentService.cancelPayOS(orderCode);
+            setStatus(res.data.status);
+          } catch (err) {
+            console.error('Cancel PayOS mark failed error', err);
+            setStatus('failed');
+          } finally {
+            setLoading(false);
+          }
+          return;
+        }
+        // Không có orderCode thì chỉ hiển thị đã hủy
         setStatus('cancelled');
         setLoading(false);
         return;

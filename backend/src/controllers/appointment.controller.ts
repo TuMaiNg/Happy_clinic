@@ -664,3 +664,50 @@ export const completeAppointment = async (req: AuthRequest, res: Response) => {
     data: updated,
   });
 };
+
+export const deleteAppointment = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Không có quyền truy cập', 403);
+  }
+
+  const appointmentId = parseInt(req.params.id);
+  const appointment = await AppointmentModel.findById(appointmentId);
+  if (!appointment) {
+    throw new AppError('Không tìm thấy lịch hẹn', 404);
+  }
+
+  // Quyền xóa: bệnh nhân chỉ được xóa lịch hẹn của mình; staff/admin có thể xóa; bác sĩ không được xóa lịch hẹn của bệnh nhân
+  const userRole = req.user.role;
+  const isStaffOrAdmin = ['staff', 'admin'].includes(userRole);
+  if (!isStaffOrAdmin) {
+    if (userRole === 'patient') {
+      const patient = await PatientModel.findByUserId(req.user.id);
+      if (!patient || patient.id !== appointment.patientId) {
+        throw new AppError('Bạn không có quyền xóa lịch hẹn này', 403);
+      }
+    } else {
+      throw new AppError('Bạn không có quyền xóa lịch hẹn này', 403);
+    }
+  }
+
+  // Chỉ cho phép xóa khi lịch hẹn đã hủy
+  if (appointment.status !== 'cancelled') {
+    throw new AppError('Chỉ có thể xóa lịch hẹn đã hủy', 400);
+  }
+
+  // Không cho xóa nếu đã có thanh toán thành công
+  const [paidRows] = await pool.query(
+    `SELECT COUNT(*) as cnt FROM payments WHERE appointment_id = ? AND status = 'paid'`,
+    [appointmentId]
+  ) as any[];
+  const hasPaid = (paidRows?.[0]?.cnt || 0) > 0;
+  if (hasPaid) {
+    throw new AppError('Không thể xóa lịch hẹn đã có thanh toán thành công', 400);
+  }
+
+  // Xóa các payments liên quan trước để tránh lỗi FK (nếu có)
+  await pool.query(`DELETE FROM payments WHERE appointment_id = ?`, [appointmentId]);
+  await pool.query(`DELETE FROM appointments WHERE id = ?`, [appointmentId]);
+
+  res.json({ success: true, message: 'Xóa lịch hẹn thành công' });
+};

@@ -11,10 +11,12 @@ import { Appointment } from '../../../services/appointment.service';
 
 interface AppointmentCardProps {
   appointment: Appointment;
+  paymentStatus?: 'paid' | 'failed' | string;
   onViewDetails?: () => void;
   onCancel?: () => void;
   onReschedule?: () => void;
   onCheckIn?: () => void;
+  onDelete?: () => void;
 }
 
 const statusConfig: { [key: string]: { color: string; text: string; icon: any } } = {
@@ -52,32 +54,46 @@ const statusConfig: { [key: string]: { color: string; text: string; icon: any } 
 
 export const AppointmentCard: React.FC<AppointmentCardProps> = ({
   appointment,
+  paymentStatus,
   onViewDetails,
   onCancel,
   onReschedule,
   onCheckIn,
+  onDelete,
 }) => {
   const status = statusConfig[appointment.status] || statusConfig.pending;
   const StatusIcon = status.icon;
-  
+
   // Kiểm tra xem lịch hẹn đã qua chưa
   const appointmentDate = new Date(appointment.appointmentDate);
   const isAppointmentPast = isPast(appointmentDate);
-  
+
   // Chỉ hiện nút hủy nếu lịch chưa qua và status cho phép
-  const canCancel = !isAppointmentPast && 
+  const canCancel = !isAppointmentPast &&
     (appointment.status === 'pending' || appointment.status === 'confirmed');
+
+  // Nhãn thanh toán
+  const paymentBadge = paymentStatus === 'paid'
+    ? { text: 'Đã thanh toán', cls: 'bg-green-100 text-green-700 border border-green-200' }
+    : paymentStatus === 'failed'
+      ? { text: 'Đã hủy', cls: 'bg-red-100 text-red-700 border border-red-200' }
+      : null;
 
   return (
     <Card className="hover:shadow-medium transition-all">
       <div className="flex justify-between items-start">
         <div className="flex-1">
           {/* Status Badge */}
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
             <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${status.color}`}>
               <StatusIcon className="w-4 h-4" />
               {status.text}
             </span>
+            {paymentBadge && (
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${paymentBadge.cls}`}>
+                {paymentBadge.text}
+              </span>
+            )}
             <span className="text-sm text-neutral-medium">
               {format(new Date(appointment.appointmentDate), 'dd/MM/yyyy HH:mm')}
             </span>
@@ -143,6 +159,16 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
                 </Button>
               )}
             </>
+          )}
+          {appointment.status === 'cancelled' && onDelete && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDelete}
+              className="text-status-error border-status-error hover:bg-status-error/10"
+            >
+              Xóa
+            </Button>
           )}
           {onViewDetails && (
             <Button

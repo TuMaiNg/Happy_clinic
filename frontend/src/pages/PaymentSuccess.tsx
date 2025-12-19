@@ -52,8 +52,19 @@ export const PaymentSuccess: React.FC = () => {
     }
   };
 
+  // Khi người dùng quay về trang thành công, chủ động mark paid nếu còn pending (phòng webhook chậm)
   useEffect(() => {
-    fetchStatus();
+    const run = async () => {
+      if (!orderCode) return;
+      try {
+        await paymentService.successPayOS(orderCode);
+      } catch (e) {
+        // ignore, fallback to polling status
+      } finally {
+        fetchStatus();
+      }
+    };
+    run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderCode, pollCount]);
 

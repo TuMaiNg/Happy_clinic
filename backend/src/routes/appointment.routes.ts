@@ -14,5 +14,6 @@ router.put('/:id/confirm', authenticate, authorize('staff', 'admin'), asyncHandl
 router.put('/:id/cancel', authenticate, asyncHandler(appointmentController.cancelAppointment));
 router.put('/:id/check-in', authenticate, authorize('staff', 'admin'), asyncHandler(appointmentController.checkInAppointment));
 router.put('/:id/complete', authenticate, authorize('doctor'), asyncHandler(appointmentController.completeAppointment));
+router.delete('/:id', authenticate, asyncHandler(appointmentController.deleteAppointment));
 
 export default router;
