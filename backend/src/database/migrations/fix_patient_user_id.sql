@@ -36,3 +36,4 @@ SELECT 'Migration completed: user_id is now nullable' AS status;
 
 
 
+

@@ -267,3 +267,4 @@ export const MedicalHistory: React.FC = () => {
 };
 
 
+

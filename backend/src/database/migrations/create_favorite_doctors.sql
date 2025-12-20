@@ -21,3 +21,4 @@ CREATE TABLE IF NOT EXISTS favorite_doctors (
 SELECT 'Migration completed: favorite_doctors table created' AS status;
 
 
+

@@ -150,3 +150,4 @@ Tất cả các operations quan trọng đã sử dụng transactions:
 - Caching có thể gây stale data, cần clear cache khi có updates
 - Transactions có thể gây lock contention, cần monitor deadlocks
 
+

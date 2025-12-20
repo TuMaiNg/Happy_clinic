@@ -25,3 +25,4 @@ router.delete('/:patientId', authenticate, authorize('doctor'), asyncHandler(doc
 
 export default router;
 
+

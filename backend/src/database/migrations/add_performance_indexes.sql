@@ -49,3 +49,4 @@ CREATE INDEX IF NOT EXISTS idx_appointments_doctor_status ON appointments(doctor
 CREATE INDEX IF NOT EXISTS idx_appointments_date_status ON appointments(appointment_date, status);
 CREATE INDEX IF NOT EXISTS idx_time_slots_schedule_available ON time_slots(schedule_id, is_available);
 
+

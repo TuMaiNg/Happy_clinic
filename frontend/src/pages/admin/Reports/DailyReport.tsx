@@ -572,3 +572,4 @@ export const DailyReport: React.FC = () => {
   );
 };
 
+
